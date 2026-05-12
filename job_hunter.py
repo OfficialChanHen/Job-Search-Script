@@ -164,8 +164,9 @@ def is_us_or_remote(location: str) -> bool:
 
 def get(url: str, **kwargs) -> requests.Response | None:
     """GET with shared headers + timeout. Returns None on any error."""
+    headers = {**HTTP_HEADERS, **kwargs.pop("headers", {})}
     try:
-        resp = requests.get(url, headers=HTTP_HEADERS, timeout=18, **kwargs)
+        resp = requests.get(url, headers=headers, timeout=18, **kwargs)
         resp.raise_for_status()
         return resp
     except requests.RequestException as e:
@@ -326,13 +327,19 @@ def fetch_arbeitnow() -> list[dict]:
         if not remote and not is_us_or_remote(location):
             continue
 
+        created_at = item.get("created_at")
+        if isinstance(created_at, int):
+            posted = datetime.fromtimestamp(created_at, tz=timezone.utc).strftime("%Y-%m-%d")
+        else:
+            posted = (created_at or "")[:10]
+
         jobs.append(entry(
             source  = "Arbeitnow",
             title   = title,
             company = item.get("company_name", ""),
             location= "Remote" if remote else location,
             url     = item.get("url", ""),
-            posted  = (item.get("created_at") or "")[:10],
+            posted  = posted,
             tags    = tags,
         ))
 
