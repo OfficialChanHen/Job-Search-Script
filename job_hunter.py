@@ -1,0 +1,691 @@
+#!/usr/bin/env python3
+"""
+╔═══════════════════════════════════════════════════╗
+║         JOB HUNTER — Daily Job Scraper            ║
+║         Built for: Chan Hen                       ║
+║  Target: Junior SWE — Remote / US-based only      ║
+║                                                   ║
+║  Sources:                                         ║
+║    • RemoteOK     (remote tech jobs)              ║
+║    • Remotive     (remote dev jobs)               ║
+║    • Arbeitnow    (remote/relocation jobs)        ║
+║    • Himalayas    (startup remote jobs)           ║
+║    • Indeed RSS   (broad job board)               ║
+║    • Adzuna       (aggregator, needs free API key)║
+║    • Eventbrite   (tech networking events)        ║
+╚═══════════════════════════════════════════════════╝
+"""
+
+import csv
+import hashlib
+import json
+import logging
+import os
+import sys
+import time
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import quote_plus
+
+import requests
+from bs4 import BeautifulSoup
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PATHS & CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
+
+BASE_DIR  = Path(__file__).parent
+DATA_DIR  = BASE_DIR / "data"
+LOGS_DIR  = BASE_DIR / "logs"
+SEEN_FILE = DATA_DIR / "seen_jobs.json"
+
+DATA_DIR.mkdir(exist_ok=True)
+LOGS_DIR.mkdir(exist_ok=True)
+
+TODAY     = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+OUT_CSV   = DATA_DIR / f"jobs_{TODAY}.csv"
+LOG_FILE  = LOGS_DIR / f"job_hunter_{TODAY}.log"
+
+# Optional API keys — set as GitHub Actions secrets (see README)
+ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID", "")
+ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "")
+EVENTBRITE_KEY = os.getenv("EVENTBRITE_KEY", "")
+
+# Chan Hen's resume-derived skill set (used for relevance scoring)
+MY_SKILLS = {
+    "react", "react native", "reactnative", "typescript", "javascript",
+    "next.js", "nextjs", "next", "tailwind", "python", "node", "nodejs",
+    "frontend", "front-end", "full stack", "fullstack", "full-stack",
+    "web", "sql", "figma", "git", "expo", "mobile", "pwa",
+    "progressive web app", "junior", "entry level", "new grad",
+}
+
+# Queries sent to sources that accept freetext search
+SEARCH_TERMS = [
+    "junior software engineer",
+    "frontend developer react",
+    "react native developer",
+    "next.js developer",
+    "software engineer typescript",
+    "full stack developer junior",
+    "entry level software engineer",
+]
+
+HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+CSV_FIELDS = [
+    "id", "date_found", "type", "source",
+    "title", "company", "location", "url", "posted", "tags",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  LOGGING
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _setup_logging() -> logging.Logger:
+    logger = logging.getLogger("job_hunter")
+    logger.setLevel(logging.DEBUG)
+    fmt = logging.Formatter(
+        "%(asctime)s  [%(levelname)-8s]  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt)
+
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(fmt)
+
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+    return logger
+
+
+log = _setup_logging()
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DEDUPLICATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_seen() -> set[str]:
+    """Load all job IDs seen in previous runs."""
+    if SEEN_FILE.exists():
+        with open(SEEN_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        log.debug(f"Loaded {len(data)} previously seen IDs from {SEEN_FILE.name}")
+        return set(data)
+    return set()
+
+
+def save_seen(seen: set[str]) -> None:
+    """Persist seen IDs so tomorrow's run skips them."""
+    with open(SEEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(sorted(seen), f, indent=2)
+    log.debug(f"Saved {len(seen)} total seen IDs to {SEEN_FILE.name}")
+
+
+def make_id(title: str, company: str, url: str = "") -> str:
+    """Stable 12-char hash used as a job's unique ID."""
+    raw = f"{title.lower().strip()}|{company.lower().strip()}|{url.strip()}"
+    return hashlib.md5(raw.encode()).hexdigest()[:12]
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  RELEVANCE SCORING
+# ─────────────────────────────────────────────────────────────────────────────
+
+def relevance(title: str, extra: str = "") -> int:
+    """Count how many of Chan's skills appear in the title + description."""
+    text = (title + " " + extra).lower()
+    return sum(1 for skill in MY_SKILLS if skill in text)
+
+
+def is_us_or_remote(location: str) -> bool:
+    """Return True if the listing is US-based, remote, or worldwide."""
+    loc = location.lower()
+    ok_tokens = {
+        "remote", "worldwide", "usa", "us", "united states",
+        "america", "anywhere", "global",
+    }
+    return any(t in loc for t in ok_tokens) or loc == ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get(url: str, **kwargs) -> requests.Response | None:
+    """GET with shared headers + timeout. Returns None on any error."""
+    try:
+        resp = requests.get(url, headers=HTTP_HEADERS, timeout=18, **kwargs)
+        resp.raise_for_status()
+        return resp
+    except requests.RequestException as e:
+        log.warning(f"    GET failed [{url[:70]}...]: {e}")
+        return None
+
+
+def entry(
+    *,
+    source: str,
+    kind: str = "job",
+    title: str,
+    company: str = "",
+    location: str = "Remote",
+    url: str = "",
+    posted: str = "",
+    tags: str = "",
+) -> dict:
+    return {
+        "source": source,
+        "type": kind,
+        "title": title,
+        "company": company,
+        "location": location,
+        "url": url,
+        "posted": posted,
+        "tags": tags,
+    }
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: RemoteOK
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_remoteok() -> list[dict]:
+    """
+    RemoteOK public API — completely free, no key needed.
+    Returns tech remote jobs from the past 24 hours (roughly).
+    Docs: https://remoteok.com/api
+    """
+    log.info("🔍 RemoteOK ...")
+    jobs: list[dict] = []
+    resp = get("https://remoteok.com/api", headers={**HTTP_HEADERS, "Accept": "application/json"})
+    if resp is None:
+        return jobs
+
+    try:
+        data = resp.json()
+    except ValueError as e:
+        log.warning(f"    RemoteOK JSON parse error: {e}")
+        return jobs
+
+    for item in data[1:]:           # index 0 is a metadata/legal block
+        if not isinstance(item, dict):
+            continue
+        title   = item.get("position", "")
+        company = item.get("company", "")
+        tags    = " ".join(item.get("tags", []))
+        if relevance(title, tags) < 1:
+            continue
+        jobs.append(entry(
+            source  = "RemoteOK",
+            title   = title,
+            company = company,
+            location= "Remote",
+            url     = item.get("url", f"https://remoteok.com/remote-jobs/{item.get('id','')}"),
+            posted  = (item.get("date") or "")[:10],
+            tags    = tags,
+        ))
+
+    log.info(f"  ✓ RemoteOK → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Remotive
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_remotive() -> list[dict]:
+    """
+    Remotive public API — free, no key needed.
+    Docs: https://remotive.com/api/remote-jobs
+    """
+    log.info("🔍 Remotive ...")
+    jobs: list[dict] = []
+    seen_urls: set[str] = set()
+    category_terms = ["react", "typescript", "frontend", "python", "mobile"]
+
+    for term in category_terms:
+        resp = get(
+            f"https://remotive.com/api/remote-jobs",
+            params={"category": "software-dev", "search": term, "limit": 20},
+        )
+        if resp is None:
+            continue
+        try:
+            items = resp.json().get("jobs", [])
+        except ValueError:
+            continue
+
+        for item in items:
+            url = item.get("url", "")
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            title   = item.get("title", "")
+            company = item.get("company_name", "")
+            desc    = BeautifulSoup(item.get("description", ""), "html.parser").get_text()[:400]
+            loc_req = item.get("candidate_required_location", "")
+
+            if relevance(title, desc) < 1:
+                continue
+            if loc_req and not is_us_or_remote(loc_req):
+                continue
+
+            jobs.append(entry(
+                source  = "Remotive",
+                title   = title,
+                company = company,
+                location= loc_req or "Remote",
+                url     = url,
+                posted  = (item.get("publication_date") or "")[:10],
+                tags    = ", ".join(item.get("tags", [])),
+            ))
+        time.sleep(0.4)
+
+    log.info(f"  ✓ Remotive → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Arbeitnow
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_arbeitnow() -> list[dict]:
+    """
+    Arbeitnow free job board API — no key needed.
+    Docs: https://www.arbeitnow.com/api/job-board-api
+    """
+    log.info("🔍 Arbeitnow ...")
+    jobs: list[dict] = []
+    resp = get("https://www.arbeitnow.com/api/job-board-api", params={"page": 1})
+    if resp is None:
+        return jobs
+
+    try:
+        items = resp.json().get("data", [])
+    except ValueError:
+        return jobs
+
+    for item in items:
+        title   = item.get("title", "")
+        tags    = " ".join(item.get("tags", []))
+        desc    = BeautifulSoup(item.get("description", ""), "html.parser").get_text()[:300]
+        remote  = item.get("remote", False)
+        location= item.get("location", "")
+
+        if relevance(title, tags + " " + desc) < 1:
+            continue
+        if not remote and not is_us_or_remote(location):
+            continue
+
+        jobs.append(entry(
+            source  = "Arbeitnow",
+            title   = title,
+            company = item.get("company_name", ""),
+            location= "Remote" if remote else location,
+            url     = item.get("url", ""),
+            posted  = (item.get("created_at") or "")[:10],
+            tags    = tags,
+        ))
+
+    log.info(f"  ✓ Arbeitnow → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Himalayas
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_himalayas() -> list[dict]:
+    """
+    Himalayas.app public API — free remote startup/tech jobs, no key needed.
+    Docs: https://himalayas.app/jobs/api
+    """
+    log.info("🔍 Himalayas ...")
+    jobs: list[dict] = []
+    resp = get("https://himalayas.app/jobs/api", params={"quantity": 100})
+    if resp is None:
+        return jobs
+
+    try:
+        items = resp.json().get("jobs", [])
+    except ValueError:
+        return jobs
+
+    for item in items:
+        title   = item.get("title", "")
+        tech    = " ".join(item.get("tech", []))
+        desc    = BeautifulSoup(item.get("description", ""), "html.parser").get_text()[:300]
+
+        if relevance(title, tech + " " + desc) < 1:
+            continue
+
+        jobs.append(entry(
+            source  = "Himalayas",
+            title   = title,
+            company = item.get("companyName", ""),
+            location= "Remote",
+            url     = item.get("applicationLink") or f"https://himalayas.app/jobs/{item.get('slug','')}",
+            posted  = (item.get("createdAt") or "")[:10],
+            tags    = tech,
+        ))
+
+    log.info(f"  ✓ Himalayas → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Indeed RSS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_indeed_rss() -> list[dict]:
+    """
+    Indeed RSS feeds — no key needed.
+    NOTE: Indeed has restricted RSS access in some regions / user agents.
+    The feed is attempted but may return empty results silently.
+    """
+    log.info("🔍 Indeed RSS ...")
+    jobs: list[dict] = []
+    seen_urls: set[str] = set()
+
+    rss_queries = [
+        ("junior software engineer", "Remote"),
+        ("react developer", "Remote"),
+        ("frontend developer typescript", "Remote"),
+        ("react native developer", "Remote"),
+        ("junior full stack developer", "Remote"),
+    ]
+
+    for q, loc in rss_queries:
+        url = (
+            f"https://www.indeed.com/rss"
+            f"?q={quote_plus(q)}&l={quote_plus(loc)}&sort=date&fromage=1"
+        )
+        resp = get(url)
+        if resp is None:
+            continue
+
+        try:
+            root = ET.fromstring(resp.text)
+        except ET.ParseError as e:
+            log.debug(f"    Indeed RSS parse error for '{q}': {e}")
+            continue
+
+        channel = root.find("channel")
+        if channel is None:
+            continue
+
+        for item in channel.findall("item"):
+            title_el   = item.find("title")
+            link_el    = item.find("link")
+            desc_el    = item.find("description")
+            pub_el     = item.find("pubDate")
+
+            if title_el is None or link_el is None:
+                continue
+
+            title = title_el.text or ""
+            link  = link_el.text or ""
+            desc  = BeautifulSoup(desc_el.text or "", "html.parser").get_text()[:300]
+
+            if link in seen_urls:
+                continue
+            seen_urls.add(link)
+
+            if relevance(title, desc) < 1:
+                continue
+
+            jobs.append(entry(
+                source  = "Indeed",
+                title   = title,
+                location= "Remote",
+                url     = link,
+                posted  = (pub_el.text or "")[:16] if pub_el is not None else "",
+            ))
+        time.sleep(1.0)
+
+    log.info(f"  ✓ Indeed → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Adzuna (requires free API key)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_adzuna() -> list[dict]:
+    """
+    Adzuna job aggregator — FREE API key needed.
+    Sign up at: https://developer.adzuna.com/ (takes 2 mins)
+    Then add ADZUNA_APP_ID and ADZUNA_APP_KEY to your GitHub Actions secrets.
+    """
+    if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
+        log.info("⏭  Adzuna skipped (no API keys — see README to add them)")
+        return []
+
+    log.info("🔍 Adzuna ...")
+    jobs: list[dict] = []
+    queries = ["junior software engineer", "react developer", "frontend engineer typescript"]
+
+    for q in queries:
+        resp = get(
+            f"https://api.adzuna.com/v1/api/jobs/us/search/1",
+            params={
+                "app_id": ADZUNA_APP_ID,
+                "app_key": ADZUNA_APP_KEY,
+                "what": q,
+                "where": "remote",
+                "sort_by": "date",
+                "results_per_page": 20,
+                "max_days_old": 1,
+            },
+        )
+        if resp is None:
+            continue
+
+        try:
+            items = resp.json().get("results", [])
+        except ValueError:
+            continue
+
+        for item in items:
+            title   = item.get("title", "")
+            company = item.get("company", {}).get("display_name", "")
+            location= item.get("location", {}).get("display_name", "")
+            desc    = BeautifulSoup(item.get("description", ""), "html.parser").get_text()[:300]
+
+            if relevance(title, desc) < 1:
+                continue
+            if not is_us_or_remote(location):
+                continue
+
+            jobs.append(entry(
+                source  = "Adzuna",
+                title   = title,
+                company = company,
+                location= location,
+                url     = item.get("redirect_url", ""),
+                posted  = (item.get("created") or "")[:10],
+                tags    = item.get("category", {}).get("label", ""),
+            ))
+        time.sleep(0.5)
+
+    log.info(f"  ✓ Adzuna → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Eventbrite — Tech Networking Events
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_eventbrite_networking() -> list[dict]:
+    """
+    Eventbrite API v3 — FREE key needed.
+    Sign up at: https://www.eventbrite.com/platform/api
+    Set EVENTBRITE_KEY in GitHub Actions secrets.
+
+    Searches for tech meetups, networking events, and startup events
+    in Minnesota + Online — great for building connections.
+    """
+    if not EVENTBRITE_KEY:
+        log.info("⏭  Eventbrite skipped (no API key — see README to add it)")
+        return []
+
+    log.info("🔍 Eventbrite networking events ...")
+    events: list[dict] = []
+    searches = [
+        {"q": "software engineer networking",    "location": "Minneapolis, MN"},
+        {"q": "tech meetup developer",           "location": "Minneapolis, MN"},
+        {"q": "startup networking tech",         "location": "Minneapolis, MN"},
+        {"q": "react javascript developer",      "online_events_only": "true"},
+        {"q": "software engineer career fair",   "online_events_only": "true"},
+    ]
+
+    for s in searches:
+        params = {
+            "token": EVENTBRITE_KEY,
+            "q": s["q"],
+            "sort_by": "date",
+            "start_date.keyword": "today",
+        }
+        if "location" in s:
+            params["location.address"] = s["location"]
+            params["location.within"] = "50mi"
+        if s.get("online_events_only"):
+            params["online_events_only"] = "true"
+
+        resp = get("https://www.eventbriteapi.com/v3/events/search/", params=params)
+        if resp is None:
+            continue
+
+        try:
+            items = resp.json().get("events", [])
+        except ValueError:
+            continue
+
+        for item in items:
+            name     = item.get("name", {}).get("text", "")
+            url      = item.get("url", "")
+            start    = item.get("start", {}).get("local", "")[:10]
+            venue_id = item.get("venue_id")
+            online   = item.get("online_event", False)
+            location = "Online" if online else "Minneapolis, MN"
+
+            events.append(entry(
+                source  = "Eventbrite",
+                kind    = "networking",
+                title   = name,
+                location= location,
+                url     = url,
+                posted  = start,
+                tags    = "networking, tech event, career",
+            ))
+        time.sleep(0.4)
+
+    log.info(f"  ✓ Eventbrite → {len(events)} networking events")
+    return events
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  OUTPUT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def write_csv(rows: list[dict]) -> None:
+    with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    log.info(f"📄 Wrote {len(rows)} rows → {OUT_CSV.name}")
+
+
+def print_summary(rows: list[dict]) -> None:
+    jobs      = [r for r in rows if r["type"] == "job"]
+    net_events= [r for r in rows if r["type"] == "networking"]
+    by_source: dict[str, int] = {}
+    for r in rows:
+        by_source[r["source"]] = by_source.get(r["source"], 0) + 1
+
+    w = 54
+    bar = "═" * w
+    log.info(f"\n╔{bar}╗")
+    log.info(f"║{'JOB HUNT DAILY REPORT':^{w}}║")
+    log.info(f"║{TODAY:^{w}}║")
+    log.info(f"╠{bar}╣")
+    log.info(f"║  {'Jobs found:':<28}{len(jobs):<{w-30}}║")
+    log.info(f"║  {'Networking events:':<28}{len(net_events):<{w-30}}║")
+    log.info(f"╠{bar}╣")
+    log.info(f"║  {'Source':<22} {'Count':<{w-24}}║")
+    log.info(f"║  {'─'*22} {'─'*8}{'':>{w-32}}║")
+    for src, cnt in sorted(by_source.items(), key=lambda x: -x[1]):
+        log.info(f"║  {src:<22} {cnt:<{w-24}}║")
+    log.info(f"╠{bar}╣")
+    log.info(f"║  CSV: {str(OUT_CSV.name):<{w-7}}║")
+    log.info(f"╚{bar}╝\n")
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  MAIN
+# ─────────────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    log.info(f"{'='*60}")
+    log.info(f"  JOB HUNTER  —  {TODAY}  —  Chan Hen")
+    log.info(f"{'='*60}")
+
+    seen = load_seen()
+
+    # ── Run all fetchers ───────────────────────────────────────────────────
+    all_raw: list[dict] = []
+    fetchers = [
+        fetch_remoteok,
+        fetch_remotive,
+        fetch_arbeitnow,
+        fetch_himalayas,
+        fetch_indeed_rss,
+        fetch_adzuna,
+        fetch_eventbrite_networking,
+    ]
+
+    for fn in fetchers:
+        try:
+            results = fn()
+            all_raw.extend(results)
+            log.debug(f"  {fn.__name__} added {len(results)} raw entries")
+        except Exception as exc:
+            log.error(f"  {fn.__name__} raised unexpected error: {exc}", exc_info=True)
+        time.sleep(0.8)
+
+    log.info(f"Total raw entries across all sources: {len(all_raw)}")
+
+    # ── Deduplicate against seen + within today's batch ────────────────────
+    new_rows:   list[dict] = []
+    today_seen: set[str]   = set()
+
+    for item in all_raw:
+        jid = make_id(item["title"], item.get("company", ""), item.get("url", ""))
+        if jid in seen or jid in today_seen:
+            log.debug(f"  DUPE skipped: {item['title'][:60]}")
+            continue
+        item["id"]         = jid
+        item["date_found"] = TODAY
+        new_rows.append(item)
+        today_seen.add(jid)
+
+    dupes = len(all_raw) - len(new_rows)
+    log.info(f"Deduplication: {len(new_rows)} new  |  {dupes} duplicates removed")
+
+    # ── Persist & output ───────────────────────────────────────────────────
+    if new_rows:
+        write_csv(new_rows)
+    else:
+        log.info("No new listings today — CSV not written.")
+
+    seen.update(today_seen)
+    save_seen(seen)
+    print_summary(new_rows)
+    log.info("Done ✓")
+
+
+if __name__ == "__main__":
+    main()
