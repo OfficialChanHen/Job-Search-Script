@@ -1,0 +1,60 @@
+2026-05-13 16:15:37  [INFO    ]  ============================================================
+2026-05-13 16:15:37  [INFO    ]    JOB HUNTER  —  2026-05-13  —  Chan Hen
+2026-05-13 16:15:37  [INFO    ]  ============================================================
+2026-05-13 16:15:37  [INFO    ]  🔍 RemoteOK ...
+2026-05-13 16:15:38  [INFO    ]    ✓ RemoteOK → 5 relevant jobs
+2026-05-13 16:15:38  [DEBUG   ]    fetch_remoteok added 5 raw entries
+2026-05-13 16:15:38  [INFO    ]  🔍 Remotive ...
+2026-05-13 16:15:41  [INFO    ]    ✓ Remotive → 0 relevant jobs
+2026-05-13 16:15:41  [DEBUG   ]    fetch_remotive added 0 raw entries
+2026-05-13 16:15:42  [INFO    ]  🔍 Arbeitnow ...
+2026-05-13 16:15:43  [INFO    ]    ✓ Arbeitnow → 1 relevant jobs
+2026-05-13 16:15:43  [DEBUG   ]    fetch_arbeitnow added 1 raw entries
+2026-05-13 16:15:44  [INFO    ]  🔍 Himalayas ...
+2026-05-13 16:15:44  [INFO    ]    ✓ Himalayas → 1 relevant jobs
+2026-05-13 16:15:44  [DEBUG   ]    fetch_himalayas added 1 raw entries
+2026-05-13 16:15:45  [INFO    ]  🔍 We Work Remotely ...
+2026-05-13 16:15:47  [INFO    ]    ✓ We Work Remotely → 34 relevant jobs
+2026-05-13 16:15:47  [DEBUG   ]    fetch_weworkremotely added 34 raw entries
+2026-05-13 16:15:48  [INFO    ]  🔍 Jobicy ...
+2026-05-13 16:15:51  [INFO    ]    ✓ Jobicy → 0 relevant jobs
+2026-05-13 16:15:51  [DEBUG   ]    fetch_jobicy added 0 raw entries
+2026-05-13 16:15:52  [INFO    ]  🔍 GitHub job repos ...
+2026-05-13 16:15:53  [INFO    ]    ✓ GitHub job repos → 262 relevant jobs
+2026-05-13 16:15:53  [DEBUG   ]    fetch_github_jobs added 262 raw entries
+2026-05-13 16:15:54  [INFO    ]  🔍 Adzuna ...
+2026-05-13 16:15:57  [INFO    ]    ✓ Adzuna → 0 relevant jobs
+2026-05-13 16:15:57  [DEBUG   ]    fetch_adzuna added 0 raw entries
+2026-05-13 16:15:57  [INFO    ]  🔍 Eventbrite networking events ...
+2026-05-13 16:15:58  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=software+engineer+networking&sort_by=date&start_date.keyword=today&location.address=Minneapolis%2C+MN&location.within=50mi
+2026-05-13 16:15:58  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=tech+meetup+developer&sort_by=date&start_date.keyword=today&location.address=Minneapolis%2C+MN&location.within=50mi
+2026-05-13 16:15:58  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=startup+networking+tech&sort_by=date&start_date.keyword=today&location.address=Minneapolis%2C+MN&location.within=50mi
+2026-05-13 16:15:58  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=react+javascript+developer&sort_by=date&start_date.keyword=today&online_events_only=true
+2026-05-13 16:15:58  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=software+engineer+career+fair&sort_by=date&start_date.keyword=today&online_events_only=true
+2026-05-13 16:15:58  [INFO    ]    ✓ Eventbrite → 0 networking events
+2026-05-13 16:15:58  [DEBUG   ]    fetch_eventbrite_networking added 0 raw entries
+2026-05-13 16:15:59  [INFO    ]  Total raw entries across all sources: 303
+2026-05-13 16:15:59  [INFO    ]  Deduplication: 303 new  |  0 duplicates removed
+2026-05-13 16:15:59  [INFO    ]  📄 Wrote 303 rows → jobs_2026-05-13.csv
+2026-05-13 16:15:59  [DEBUG   ]  Saved 303 total seen IDs to seen_jobs.json
+2026-05-13 16:15:59  [INFO    ]  
+╔══════════════════════════════════════════════════════╗
+2026-05-13 16:15:59  [INFO    ]  ║                JOB HUNT DAILY REPORT                 ║
+2026-05-13 16:15:59  [INFO    ]  ║                      2026-05-13                      ║
+2026-05-13 16:15:59  [INFO    ]  ╠══════════════════════════════════════════════════════╣
+2026-05-13 16:15:59  [INFO    ]  ║  Jobs found:                 303                     ║
+2026-05-13 16:15:59  [INFO    ]  ║  Networking events:          0                       ║
+2026-05-13 16:15:59  [INFO    ]  ╠══════════════════════════════════════════════════════╣
+2026-05-13 16:15:59  [INFO    ]  ║  Source                 Count                         ║
+2026-05-13 16:15:59  [INFO    ]  ║  ────────────────────── ────────                      ║
+2026-05-13 16:15:59  [INFO    ]  ║  GitHub/NewGrad         149                           ║
+2026-05-13 16:15:59  [INFO    ]  ║  GitHub/Internship      113                           ║
+2026-05-13 16:15:59  [INFO    ]  ║  WeWorkRemotely         34                            ║
+2026-05-13 16:15:59  [INFO    ]  ║  RemoteOK               5                             ║
+2026-05-13 16:15:59  [INFO    ]  ║  Arbeitnow              1                             ║
+2026-05-13 16:15:59  [INFO    ]  ║  Himalayas              1                             ║
+2026-05-13 16:15:59  [INFO    ]  ╠══════════════════════════════════════════════════════╣
+2026-05-13 16:15:59  [INFO    ]  ║  CSV: jobs_2026-05-13.csv                            ║
+2026-05-13 16:15:59  [INFO    ]  ╚══════════════════════════════════════════════════════╝
+
+2026-05-13 16:15:59  [INFO    ]  Done ✓
