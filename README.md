@@ -2,7 +2,28 @@
 
 Automated daily job scraper for junior software engineer roles.  
 Runs every morning at **8:00 AM CST** via GitHub Actions.  
-Results are committed back to this repo as `data/jobs_YYYY-MM-DD.csv`.
+Results are committed back to this repo as `data/jobs_YYYY-MM-DD.csv`, and an
+interactive **dashboard** is rebuilt at `docs/index.html` (serve it with GitHub Pages).
+
+**Priority: in-person US roles first, then hybrid, then remote.**
+
+---
+
+## 📊 The Dashboard
+
+Every run rebuilds `docs/index.html` — a single self-contained page with **all
+jobs ever collected**, scored against your resume skills:
+
+- Tabs: **New today / Minnesota / In-person / Hybrid / Remote / Junior / Internships**
+- Search, source filter, best-match sorting, one-click **Apply ↗** links
+- Track progress per job: **★ Save / ✓ Applied / 🚫 Hide** (stored in your browser)
+- **Export tracked (CSV)** button downloads your Applied + Saved list
+
+**One-time setup:** repo → Settings → Pages → Source: *Deploy from a branch* →
+Branch `main`, folder `/docs`. Your dashboard then lives at
+`https://officialchanhen.github.io/Job-Search-Script/` and refreshes daily.
+
+To rebuild locally: `python build_dashboard.py` then open `docs/index.html`.
 
 ---
 
@@ -10,15 +31,23 @@ Results are committed back to this repo as `data/jobs_YYYY-MM-DD.csv`.
 
 | Source | Type | Key Required? |
 |---|---|---|
+| **Greenhouse boards** | Company career pages (Stripe, Databricks, Axon, SpaceX, +25 more) | ❌ Free |
+| **Ashby boards** | Company career pages (OpenAI, Ramp, Notion, Cursor, …) | ❌ Free |
+| **Lever boards** | Company career pages (Palantir, Zoox, …) | ❌ Free |
+| **GitHub/NewGrad** | SimplifyJobs new-grad table | ❌ Free |
+| **GitHub/Internship** | SimplifyJobs internships | ❌ Free |
 | **RemoteOK** | Remote tech jobs | ❌ Free |
 | **Remotive** | Remote dev jobs | ❌ Free |
 | **Arbeitnow** | Remote / relocation jobs | ❌ Free |
 | **Himalayas** | Startup remote jobs | ❌ Free |
-| **Indeed RSS** | Broad job board | ❌ Free |
+| **WeWorkRemotely** | Remote dev RSS | ❌ Free |
+| **Jobicy** | Remote jobs API | ❌ Free |
 | **Adzuna** | Large job aggregator | ✅ Free signup |
 | **Eventbrite** | Tech networking events | ✅ Free signup |
 
-All results are filtered to **Remote** or **US-based** locations and scored against your resume skills (React, TypeScript, Next.js, Python, React Native, etc.).
+All results are filtered to **US-based or US-open remote** locations and scored
+against your resume skills (React, TypeScript, Next.js, Python, React Native, etc.).
+Company-board results are additionally filtered to junior-friendly titles.
 
 ---
 
@@ -95,6 +124,7 @@ logs/
 | `url` | Direct link to apply or RSVP |
 | `posted` | Date the listing was posted |
 | `tags` | Tech stack tags |
+| `work_mode` | `onsite` / `hybrid` / `remote` (onsite sorts first) |
 
 ---
 
@@ -114,7 +144,15 @@ SEARCH_TERMS = [
     "react native developer",
     ...
 ]
+
+# Add/remove companies whose career boards get scraped directly
+GREENHOUSE_BOARDS = ["stripe", "databricks", ...]
+LEVER_BOARDS      = ["palantir", ...]
+ASHBY_BOARDS      = ["openai", "ramp", ...]
 ```
+
+> Find a company's board slug from its careers-page URL:
+> `boards.greenhouse.io/<slug>`, `jobs.lever.co/<slug>`, or `jobs.ashbyhq.com/<slug>`.
 
 Change the cron schedule in `.github/workflows/daily_jobs.yml`:
 ```yaml

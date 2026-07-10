@@ -14,9 +14,14 @@
 ║     • Jobicy            (remote jobs API)              ║
 ║     • GitHub/NewGrad    (SimplifyJobs new-grad table)  ║
 ║     • GitHub/Internship (SimplifyJobs internships)     ║
+║     • Greenhouse        (company career boards)        ║
+║     • Lever             (company career boards)        ║
+║     • Ashby             (company career boards)        ║
 ║     • Adzuna            (aggregator, needs API key)    ║
 ║     • Eventbrite        (tech networking events)       ║
 ╚════════════════════════════════════════════════════════╝
+
+Priority: in-person US roles first, then hybrid, then remote.
 """
 
 import csv
@@ -113,6 +118,25 @@ SEARCH_TERMS = [
     "junior typescript developer",
 ]
 
+# ── Company career boards (public JSON APIs — no keys needed) ───────────────
+# Mix of top-tier tech, mid-size, and smaller startups. All verified live.
+# Greenhouse: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
+GREENHOUSE_BOARDS = [
+    # top tier
+    "stripe", "airbnb", "databricks", "robinhood", "coinbase", "doordashusa",
+    "dropbox", "datadog", "cloudflare", "mongodb", "okta", "twilio", "reddit",
+    "spacex", "anthropic", "figma", "discord", "duolingo", "instacart",
+    # mid tier
+    "samsara", "brex", "gusto", "asana", "affirm", "chime", "sofi",
+    "andurilindustries", "axon",
+    # smaller / lower tier
+    "vercel", "attentive",
+]
+# Lever: https://api.lever.co/v0/postings/{slug}?mode=json
+LEVER_BOARDS = ["palantir", "zoox", "nium"]
+# Ashby: https://api.ashbyhq.com/posting-api/job-board/{slug}
+ASHBY_BOARDS = ["ramp", "linear", "openai", "cursor", "notion", "replit", "supabase"]
+
 # US state abbreviation pattern — matches ", CA" / ", NY" / ", TX" etc.
 _US_STATE_RE = re.compile(
     r',\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|'
@@ -131,7 +155,7 @@ HTTP_HEADERS = {
 
 CSV_FIELDS = [
     "id", "date_found", "type", "source",
-    "title", "company", "location", "url", "posted", "tags",
+    "title", "company", "location", "url", "posted", "tags", "work_mode",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -197,18 +221,43 @@ def relevance(title: str, extra: str = "") -> int:
     return sum(1 for skill in MY_SKILLS if skill in text)
 
 
+# Major US tech-hub cities that often appear without a state suffix
+_US_CITIES = {
+    "san francisco", "new york", "nyc", "seattle", "austin", "boston",
+    "chicago", "denver", "los angeles", "san jose", "palo alto",
+    "mountain view", "minneapolis", "st. paul", "st paul", "atlanta",
+    "miami", "washington d.c", "washington dc", "bellevue", "menlo park",
+}
+
+# Non-US markers — reject even "Remote" listings pinned to these regions
+_NON_US_MARKERS = {
+    "mexico", "canada", "europe", "emea", "apac", "latam", "united kingdom",
+    " uk", "(uk", "ireland", "germany", "france", "poland", "india", "brazil",
+    "argentina", "spain", "portugal", "netherlands", "australia", "japan",
+    "china", "singapore", "israel", "london", "berlin", "toronto", "vancouver",
+    "dublin", "amsterdam", "bangalore", "tokyo", "sydney", "philippines",
+}
+
+
 def is_valid_location(location: str) -> bool:
-    """True if the listing is remote, worldwide, or physically in the US."""
+    """True if the listing is remote (US-open), worldwide, or physically in the US."""
     if not location.strip():
         return True
     loc = location.lower()
-    ok_tokens = {
-        "remote", "worldwide", "usa", "united states",
-        "america", "anywhere", "global", "multiple",
-    }
-    if any(t in loc for t in ok_tokens):
+
+    us_signal = (
+        "usa" in loc or "united states" in loc or "u.s." in loc
+        or bool(_US_STATE_RE.search(location))
+        or any(c in loc for c in _US_CITIES)
+    )
+    if us_signal:
         return True
-    return bool(_US_STATE_RE.search(location))
+    # "Remote - Mexico", "Dublin, Ireland", etc. — remote but not for the US
+    if any(m in loc for m in _NON_US_MARKERS):
+        return False
+
+    ok_tokens = {"remote", "worldwide", "america", "anywhere", "global", "multiple"}
+    return any(t in loc for t in ok_tokens)
 
 
 def is_swe_title(title: str) -> bool:
@@ -221,6 +270,41 @@ def is_too_senior(title: str) -> bool:
     """True if title targets senior+ experience with no junior override."""
     t = title.lower()
     return any(s in t for s in SENIOR_TITLE) and not any(j in t for j in JUNIOR_TITLE)
+
+
+def is_junior_friendly(title: str) -> bool:
+    """
+    True if a title looks approachable for a junior candidate: an explicit
+    junior/new-grad signal, a level-1 suffix ("Engineer I" / "Engineer 1"),
+    or at least one resume-skill match (e.g. "Frontend Engineer").
+    Used to trim the firehose from large company boards.
+    """
+    t = title.lower()
+    if any(j in t for j in JUNIOR_TITLE):
+        return True
+    if re.search(r"\b(i|1)\b\s*$", t) or re.search(r"\b(i|1)\s*[-–,(]", t):
+        return True
+    if "university" in t or "grad" in t or "campus" in t:
+        return True
+    return relevance(title) >= 1
+
+
+def classify_work_mode(location: str, explicit: str = "") -> str:
+    """
+    Bucket a listing as onsite / hybrid / remote.
+    `explicit` wins when the source API states it (Lever/Ashby do).
+    """
+    if explicit in ("onsite", "hybrid", "remote"):
+        return explicit
+    loc = (location or "").lower()
+    if "hybrid" in loc:
+        return "hybrid"
+    if not loc.strip() or REMOTE_LOC_RE.search(loc):
+        return "remote"
+    return "onsite"
+
+
+REMOTE_LOC_RE = re.compile(r"remote|anywhere|worldwide|global|distributed")
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  HELPERS
@@ -248,6 +332,7 @@ def entry(
     url: str = "",
     posted: str = "",
     tags: str = "",
+    work_mode: str = "",
 ) -> dict:
     return {
         "source": source,
@@ -258,6 +343,7 @@ def entry(
         "url": url,
         "posted": posted,
         "tags": tags,
+        "work_mode": work_mode or classify_work_mode(location),
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -677,6 +763,149 @@ def fetch_github_jobs() -> list[dict]:
     return jobs
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Company career boards — Greenhouse / Lever / Ashby
+#  Direct from the companies' own ATS. Mostly in-person roles → top priority.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _keep_company_role(title: str, location: str) -> bool:
+    """Shared filter for company boards: junior-friendly SWE role in the US."""
+    if not is_swe_title(title) or is_too_senior(title):
+        return False
+    if not is_junior_friendly(title):
+        return False
+    return is_valid_location(location)
+
+
+def fetch_greenhouse_boards() -> list[dict]:
+    """
+    Greenhouse public board API — free, no key needed.
+    Docs: https://developers.greenhouse.io/job-board.html
+    """
+    log.info("🔍 Greenhouse company boards ...")
+    jobs: list[dict] = []
+
+    for slug in GREENHOUSE_BOARDS:
+        resp = get(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs")
+        if resp is None:
+            continue
+        try:
+            items = resp.json().get("jobs", [])
+        except ValueError:
+            continue
+
+        company = slug.replace("industries", " industries").replace("usa", "").title()
+        kept = 0
+        for item in items:
+            title    = item.get("title", "")
+            location = (item.get("location") or {}).get("name", "")
+            if not _keep_company_role(title, location):
+                continue
+            jobs.append(entry(
+                source   = "Greenhouse",
+                title    = title,
+                company  = item.get("company_name") or company,
+                location = location,
+                url      = item.get("absolute_url", ""),
+                posted   = (item.get("first_published") or item.get("updated_at") or "")[:10],
+            ))
+            kept += 1
+        log.debug(f"    {slug}: kept {kept}/{len(items)}")
+        time.sleep(0.3)
+
+    log.info(f"  ✓ Greenhouse → {len(jobs)} relevant jobs")
+    return jobs
+
+
+def fetch_lever_boards() -> list[dict]:
+    """
+    Lever public postings API — free, no key needed.
+    Docs: https://github.com/lever/postings-api
+    """
+    log.info("🔍 Lever company boards ...")
+    jobs: list[dict] = []
+
+    for slug in LEVER_BOARDS:
+        resp = get(f"https://api.lever.co/v0/postings/{slug}", params={"mode": "json"})
+        if resp is None:
+            continue
+        try:
+            items = resp.json()
+        except ValueError:
+            continue
+        if not isinstance(items, list):
+            continue
+
+        for item in items:
+            title    = item.get("text", "")
+            cats     = item.get("categories") or {}
+            location = cats.get("location", "") or ", ".join(cats.get("allLocations", []))
+            if not _keep_company_role(title, location):
+                continue
+            created = item.get("createdAt")
+            posted  = (
+                datetime.fromtimestamp(created / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+                if isinstance(created, (int, float)) else ""
+            )
+            jobs.append(entry(
+                source    = "Lever",
+                title     = title,
+                company   = slug.title(),
+                location  = location,
+                url       = item.get("hostedUrl", ""),
+                posted    = posted,
+                tags      = cats.get("team", ""),
+                work_mode = classify_work_mode(
+                    location, (item.get("workplaceType") or "").lower().replace("-", "")),
+            ))
+        time.sleep(0.3)
+
+    log.info(f"  ✓ Lever → {len(jobs)} relevant jobs")
+    return jobs
+
+
+def fetch_ashby_boards() -> list[dict]:
+    """
+    Ashby public job-board API — free, no key needed.
+    Docs: https://developers.ashbyhq.com/docs/public-job-posting-api
+    """
+    log.info("🔍 Ashby company boards ...")
+    jobs: list[dict] = []
+
+    for slug in ASHBY_BOARDS:
+        resp = get(f"https://api.ashbyhq.com/posting-api/job-board/{slug}")
+        if resp is None:
+            continue
+        try:
+            items = resp.json().get("jobs", [])
+        except ValueError:
+            continue
+
+        for item in items:
+            title    = item.get("title", "")
+            location = item.get("location", "")
+            if not _keep_company_role(title, location):
+                continue
+            # workplaceType ("OnSite"/"Hybrid"/"Remote") beats isRemote, which
+            # Ashby sets true even for hybrid HQ roles
+            wt = (item.get("workplaceType") or "").lower().replace("-", "")
+            mode = classify_work_mode(location, wt) if wt else (
+                "remote" if item.get("isRemote") else classify_work_mode(location))
+            jobs.append(entry(
+                source    = "Ashby",
+                title     = title,
+                company   = slug.title(),
+                location  = location or "Remote",
+                url       = item.get("jobUrl", ""),
+                posted    = (item.get("publishedAt") or "")[:10],
+                tags      = item.get("department", "") or item.get("team", ""),
+                work_mode = mode,
+            ))
+        time.sleep(0.3)
+
+    log.info(f"  ✓ Ashby → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  SOURCE: Adzuna (requires free API key)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -816,6 +1045,13 @@ def fetch_eventbrite_networking() -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def write_csv(rows: list[dict]) -> None:
+    # If today's CSV already exists (re-run same day), merge instead of clobber
+    if OUT_CSV.exists():
+        with open(OUT_CSV, newline="", encoding="utf-8") as f:
+            existing = list(csv.DictReader(f))
+        have = {r.get("id") for r in existing}
+        rows = existing + [r for r in rows if r.get("id") not in have]
+
     with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
@@ -868,6 +1104,9 @@ def main() -> None:
         fetch_weworkremotely,
         fetch_jobicy,
         fetch_github_jobs,
+        fetch_greenhouse_boards,
+        fetch_lever_boards,
+        fetch_ashby_boards,
         fetch_adzuna,
         fetch_eventbrite_networking,
     ]
@@ -901,6 +1140,10 @@ def main() -> None:
     log.info(f"Deduplication: {len(new_rows)} new  |  {dupes} duplicates removed")
 
     # ── Persist & output ───────────────────────────────────────────────────
+    # In-person first, then hybrid, then remote (per-mode order preserved)
+    _MODE_RANK = {"onsite": 0, "hybrid": 1, "remote": 2}
+    new_rows.sort(key=lambda r: _MODE_RANK.get(r.get("work_mode", ""), 3))
+
     if new_rows:
         write_csv(new_rows)
     else:
