@@ -292,6 +292,33 @@ header .sub { color: var(--ink-3); font-size: 13px; margin-top: 4px; }
 .toolbar { display: flex; gap: 8px; justify-content: flex-end; margin: -6px 0 12px; }
 .toolbar button { font: inherit; font-size: 12px; background: transparent; border: 1px solid var(--border); color: var(--ink-2); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
 .toolbar button:hover { color: var(--series-1); border-color: var(--series-1); }
+.toolbar button.sync-on { border-color: var(--good); color: var(--good); }
+
+/* ── Google Sheets sync settings panel ──────────────────── */
+.settings {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 16px; font-size: 13px;
+}
+.settings h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+.settings p { color: var(--ink-3); font-size: 12px; margin-bottom: 10px; line-height: 1.5; }
+.settings .field { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings input {
+  flex: 1 1 320px; background: var(--plane); color: var(--ink-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px;
+}
+.settings .save { background: var(--series-1); border: 1px solid var(--series-1); color: #fff; border-radius: 8px; padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer; }
+.settings .status { margin-top: 8px; font-size: 12px; }
+.settings .status.ok { color: var(--good); }
+.settings .status.off { color: var(--ink-3); }
+
+/* ── toast ──────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--ink-1); color: var(--plane); padding: 10px 18px; border-radius: 999px;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 50;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.err { background: var(--crit); }
 @media (max-width: 640px) {
   .job { grid-template-columns: 1fr; }
   .score { display: none; }
@@ -326,13 +353,28 @@ header .sub { color: var(--ink-3); font-size: 13px; margin-top: 4px; }
   </div>
 
   <div class="toolbar">
+    <button id="syncBtn" title="Connect your Google Sheet">⚙ Sheet sync</button>
     <button id="exportBtn" title="Download your Applied + Saved list as CSV">⬇ Export tracked (CSV)</button>
+  </div>
+
+  <div class="settings" id="settings" hidden>
+    <h2>📗 Google Sheets auto-fill</h2>
+    <p>When you mark a job <strong>✓ Applied</strong>, a row is added to your tracker sheet
+       (Last Update · Company · Job · Location · Status · Application).
+       Paste your Apps Script <strong>Web App URL</strong> below — see the one-time setup in the repo's
+       <code>sheet-sync/README.md</code>.</p>
+    <div class="field">
+      <input type="url" id="sheetUrl" placeholder="https://script.google.com/macros/s/…/exec">
+      <button class="save" id="sheetSave">Save &amp; test</button>
+    </div>
+    <div class="status off" id="sheetStatus">Not connected — Applied marks stay in this browser only.</div>
   </div>
 
   <div class="count-note" id="countNote"></div>
   <div id="list"></div>
   <button class="loadmore" id="loadMore" hidden>Show more</button>
 </div>
+<div id="toast"></div>
 
 <script>
 const JOBS = __JOBS_JSON__;
@@ -341,15 +383,73 @@ const PAGE = 100;
 
 /* ── status persistence (per-browser) ─────────────────────── */
 const LS_KEY = "chan-job-status-v1";
-let statusMap = {};
+const LS_URL = "chan-sheet-url-v1";
+const LS_SYNCED = "chan-sheet-synced-v1";   // ids already pushed to the sheet
+let statusMap = {}, syncedSet = {};
 try { statusMap = JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch (e) {}
+try { syncedSet = JSON.parse(localStorage.getItem(LS_SYNCED) || "{}"); } catch (e) {}
+let sheetUrl = localStorage.getItem(LS_URL) || "";
+
 function setStatus(id, s) {
+  const prev = (statusMap[id] || {}).s || "";
   if (s) statusMap[id] = { s, t: new Date().toISOString().slice(0, 10) };
   else delete statusMap[id];
   localStorage.setItem(LS_KEY, JSON.stringify(statusMap));
+  // Auto-fill the Google Sheet the first time a job becomes "Applied"
+  if (s === "applied" && prev !== "applied") {
+    const job = JOBS.find(j => j.id === id);
+    if (job) syncToSheet(job);
+  }
   render();
 }
 const st = id => (statusMap[id] || {}).s || "";
+
+/* ── Google Sheets sync ───────────────────────────────────── */
+function toast(msg, isErr) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "show" + (isErr ? " err" : "");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { t.className = ""; }, 2600);
+}
+
+function syncToSheet(job, opts) {
+  opts = opts || {};
+  if (!sheetUrl) {
+    if (!opts.silent) toast("Set your Google Sheet URL in ⚙ Sheet sync", true);
+    return;
+  }
+  if (syncedSet[job.id] && !opts.force) return;   // already logged
+  const d = new Date();
+  const payload = {
+    date: `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`,
+    company: job.company, title: job.title, location: job.location,
+    status: "Applied", url: job.url, id: job.id,
+  };
+  // Apps Script needs a "simple" request (text/plain) to skip the CORS preflight
+  fetch(sheetUrl, {
+    method: "POST", mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  }).then(() => {
+    syncedSet[job.id] = 1;
+    localStorage.setItem(LS_SYNCED, JSON.stringify(syncedSet));
+    if (!opts.silent) toast("✓ Added to Google Sheet — " + job.company);
+  }).catch(() => {
+    if (!opts.silent) toast("Sheet sync failed — check the URL", true);
+  });
+}
+
+function refreshSyncUI() {
+  const on = !!sheetUrl;
+  document.getElementById("syncBtn").classList.toggle("sync-on", on);
+  const s = document.getElementById("sheetStatus");
+  s.className = "status " + (on ? "ok" : "off");
+  s.textContent = on
+    ? "✓ Connected — new Applied marks are added to your sheet automatically."
+    : "Not connected — Applied marks stay in this browser only.";
+  document.getElementById("sheetUrl").value = sheetUrl;
+}
 
 /* ── state ────────────────────────────────────────────────── */
 let tab = "new", query = "", source = "", sortBy = "score", shown = PAGE;
@@ -497,11 +597,34 @@ document.getElementById("source").onchange = e => { source = e.target.value; sho
 document.getElementById("sort").onchange = e => { sortBy = e.target.value; render(); };
 document.getElementById("loadMore").onclick = () => { shown += PAGE; render(); };
 
+/* ── Google Sheets settings panel ─────────────────────────── */
+document.getElementById("syncBtn").onclick = () => {
+  const p = document.getElementById("settings");
+  p.hidden = !p.hidden;
+};
+document.getElementById("sheetSave").onclick = () => {
+  const v = document.getElementById("sheetUrl").value.trim();
+  if (v && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(v)) {
+    toast("That doesn't look like an Apps Script /exec URL", true); return;
+  }
+  sheetUrl = v;
+  localStorage.setItem(LS_URL, sheetUrl);
+  refreshSyncUI();
+  if (sheetUrl) {
+    // Send a one-row connection test the user can see land in the sheet
+    syncToSheet({ id: "__test__", company: "(sync test)", title: "Connection OK — delete this row",
+                  location: "", url: "" }, { force: true });
+  } else {
+    toast("Sheet sync turned off");
+  }
+};
+
 const srcSel = document.getElementById("source");
 [...new Set(JOBS.map(j => j.source))].sort().forEach(s => {
   const o = document.createElement("option"); o.value = o.textContent = s; srcSel.append(o);
 });
 
+refreshSyncUI();
 renderChart();
 render();
 </script>
