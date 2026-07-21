@@ -1,0 +1,382 @@
+2026-07-21 15:38:06  [INFO    ]  ============================================================
+2026-07-21 15:38:06  [INFO    ]    JOB HUNTER  —  2026-07-21  —  Chan Hen
+2026-07-21 15:38:06  [INFO    ]  ============================================================
+2026-07-21 15:38:06  [DEBUG   ]  Loaded 1179 previously seen IDs from seen_jobs.json
+2026-07-21 15:38:06  [INFO    ]  🔍 RemoteOK ...
+2026-07-21 15:38:07  [INFO    ]    ✓ RemoteOK → 1 relevant jobs
+2026-07-21 15:38:07  [DEBUG   ]    fetch_remoteok added 1 raw entries
+2026-07-21 15:38:08  [INFO    ]  🔍 Remotive ...
+2026-07-21 15:38:10  [INFO    ]    ✓ Remotive → 0 relevant jobs
+2026-07-21 15:38:10  [DEBUG   ]    fetch_remotive added 0 raw entries
+2026-07-21 15:38:11  [INFO    ]  🔍 Arbeitnow ...
+2026-07-21 15:38:12  [INFO    ]    ✓ Arbeitnow → 3 relevant jobs
+2026-07-21 15:38:12  [DEBUG   ]    fetch_arbeitnow added 3 raw entries
+2026-07-21 15:38:13  [INFO    ]  🔍 Himalayas ...
+2026-07-21 15:38:13  [INFO    ]    ✓ Himalayas → 0 relevant jobs
+2026-07-21 15:38:13  [DEBUG   ]    fetch_himalayas added 0 raw entries
+2026-07-21 15:38:14  [INFO    ]  🔍 We Work Remotely ...
+2026-07-21 15:38:16  [INFO    ]    ✓ We Work Remotely → 10 relevant jobs
+2026-07-21 15:38:16  [DEBUG   ]    fetch_weworkremotely added 10 raw entries
+2026-07-21 15:38:17  [INFO    ]  🔍 Jobicy ...
+2026-07-21 15:38:24  [INFO    ]    ✓ Jobicy → 7 relevant jobs
+2026-07-21 15:38:24  [DEBUG   ]    fetch_jobicy added 7 raw entries
+2026-07-21 15:38:24  [INFO    ]  🔍 GitHub job repos ...
+2026-07-21 15:38:25  [INFO    ]    ✓ GitHub job repos → 188 relevant jobs
+2026-07-21 15:38:25  [DEBUG   ]    fetch_github_jobs added 188 raw entries
+2026-07-21 15:38:26  [INFO    ]  🔍 Greenhouse company boards ...
+2026-07-21 15:38:26  [DEBUG   ]      stripe: kept 3/522
+2026-07-21 15:38:27  [DEBUG   ]      airbnb: kept 0/199
+2026-07-21 15:38:27  [DEBUG   ]      databricks: kept 0/781
+2026-07-21 15:38:27  [DEBUG   ]      robinhood: kept 1/118
+2026-07-21 15:38:28  [DEBUG   ]      coinbase: kept 0/151
+2026-07-21 15:38:28  [DEBUG   ]      doordashusa: kept 3/469
+2026-07-21 15:38:29  [DEBUG   ]      dropbox: kept 0/36
+2026-07-21 15:38:29  [DEBUG   ]      datadog: kept 0/420
+2026-07-21 15:38:30  [DEBUG   ]      cloudflare: kept 0/263
+2026-07-21 15:38:30  [DEBUG   ]      mongodb: kept 0/392
+2026-07-21 15:38:31  [DEBUG   ]      okta: kept 0/347
+2026-07-21 15:38:31  [DEBUG   ]      twilio: kept 0/165
+2026-07-21 15:38:31  [DEBUG   ]      reddit: kept 1/194
+2026-07-21 15:38:32  [DEBUG   ]      spacex: kept 19/1962
+2026-07-21 15:38:32  [DEBUG   ]      anthropic: kept 1/405
+2026-07-21 15:38:33  [DEBUG   ]      figma: kept 2/171
+2026-07-21 15:38:33  [DEBUG   ]      discord: kept 0/50
+2026-07-21 15:38:34  [DEBUG   ]      duolingo: kept 0/61
+2026-07-21 15:38:34  [DEBUG   ]      instacart: kept 0/121
+2026-07-21 15:38:35  [DEBUG   ]      samsara: kept 0/333
+2026-07-21 15:38:35  [DEBUG   ]      brex: kept 0/262
+2026-07-21 15:38:35  [DEBUG   ]      gusto: kept 0/74
+2026-07-21 15:38:36  [DEBUG   ]      asana: kept 0/142
+2026-07-21 15:38:36  [DEBUG   ]      affirm: kept 2/172
+2026-07-21 15:38:37  [DEBUG   ]      chime: kept 1/66
+2026-07-21 15:38:37  [DEBUG   ]      sofi: kept 0/64
+2026-07-21 15:38:38  [DEBUG   ]      andurilindustries: kept 9/2159
+2026-07-21 15:38:38  [DEBUG   ]      axon: kept 0/488
+2026-07-21 15:38:39  [DEBUG   ]      vercel: kept 1/73
+2026-07-21 15:38:39  [DEBUG   ]      attentive: kept 0/47
+2026-07-21 15:38:39  [INFO    ]    ✓ Greenhouse → 43 relevant jobs
+2026-07-21 15:38:39  [DEBUG   ]    fetch_greenhouse_boards added 43 raw entries
+2026-07-21 15:38:40  [INFO    ]  🔍 Lever company boards ...
+2026-07-21 15:38:44  [INFO    ]    ✓ Lever → 13 relevant jobs
+2026-07-21 15:38:44  [DEBUG   ]    fetch_lever_boards added 13 raw entries
+2026-07-21 15:38:45  [INFO    ]  🔍 Ashby company boards ...
+2026-07-21 15:38:48  [INFO    ]    ✓ Ashby → 34 relevant jobs
+2026-07-21 15:38:48  [DEBUG   ]    fetch_ashby_boards added 34 raw entries
+2026-07-21 15:38:49  [INFO    ]  🔍 Adzuna ...
+2026-07-21 15:38:51  [INFO    ]    ✓ Adzuna → 0 relevant jobs
+2026-07-21 15:38:51  [DEBUG   ]    fetch_adzuna added 0 raw entries
+2026-07-21 15:38:52  [INFO    ]  🔍 Eventbrite networking events ...
+2026-07-21 15:38:53  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=software+engineer+networking&sort_by=date&start_date.keyword=today&location.address=Minneapolis%2C+MN&location.within=50mi
+2026-07-21 15:38:53  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=tech+meetup+developer&sort_by=date&start_date.keyword=today&location.address=Minneapolis%2C+MN&location.within=50mi
+2026-07-21 15:38:53  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=startup+networking+tech&sort_by=date&start_date.keyword=today&location.address=Minneapolis%2C+MN&location.within=50mi
+2026-07-21 15:38:53  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=react+javascript+developer&sort_by=date&start_date.keyword=today&online_events_only=true
+2026-07-21 15:38:53  [WARNING ]      GET failed [https://www.eventbriteapi.com/v3/events/search/...]: 404 Client Error: NOT FOUND for url: https://www.eventbriteapi.com/v3/events/search/?token=NG2I5TIJWMQPU5GSUM3Z&q=software+engineer+career+fair&sort_by=date&start_date.keyword=today&online_events_only=true
+2026-07-21 15:38:53  [INFO    ]    ✓ Eventbrite → 0 networking events
+2026-07-21 15:38:53  [DEBUG   ]    fetch_eventbrite_networking added 0 raw entries
+2026-07-21 15:38:54  [INFO    ]  Total raw entries across all sources: 299
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: React Native Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Frontend Softwareentwickler (m/w/d)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Fullstack Softwareentwickler (m/w/d)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Developer (React + AWS)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Developer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: DevOps Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Product Solutions Engineer - Creator Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Freelance Full-Stack Web App Developer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Technical Solutions Engineer/Web Developer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Site Reliability Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Product Engineer - Agentic First
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: (Native Swedish) Customer Support Consultant (remotely)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Frontend Engineer React and AWS
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Part Time Instructor - Fullstack AI
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Engineer (Global)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Python & React Engineer with AI (Remote, Latam)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Unsecured Installments
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Deployed Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer - Unity
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad - Performance
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - General
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Model and Simulation
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Conversion Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer - C++
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Backend Compiler Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad - Undergrads
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Internal Tooling
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Device Control
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – University Graduate
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad - Production Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad - Defense
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad - Defense
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad - Defense
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer New Grad - Commercial
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer New Grad - Commercial
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – University Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: NFC System Software Engineer - Entry Level
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Adobe Exp Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: NLM Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Developer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Developer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 C#
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Infrastructure Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Associate Software Engineer, Core Infrastructure - Moveworks
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Early Career Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer - New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior C# Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Communications Systems Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Automation
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – Early Career
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Full Stack Engineer (Java/React)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineering AMTS College Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – New Grads - Multiple Teams
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Commerce Engineering
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Commerce Engineering
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: New Grad Software Engineer - Backend Rust
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: BI Dashboard Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Fullstack
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Frontend - Growth
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Cloud Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 - Backend
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineering AMTS/MTS – College Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1 / 2 - New York
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1/2
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: AI-First Software Engineer – Entry Level
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Developer - Active TS/SCI with Poly Required
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – Early Career
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer Junior
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Warehouse Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer - Junior
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Deep Learning Software Engineer – New College Grad - TensorR
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Global Tapeout and Mask Operations New College Graduate - Bi
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Cosmos - Data Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Research Data Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Data Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Entry Level Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Product Implementation Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Developer New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer – New grad / early career
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Flight Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer 1
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Developer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Campus Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Palantir Software Engineer Intern - Forward Deployed Softwar
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Intern – Software Engineering
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Developer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineering Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineering Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineering Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Agentic AI Engineer Co-op
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Monetization Technology - Ads Cre
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Backend Software Engineer Intern - Media Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Project Intern - Platform efficiency
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer/Mobile Engineer Intern - Monetization Tech
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Monetization Technology
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Capital Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: AI Software Engineer Intern - Transaction Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Software Engineer - AI Hardware I
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Vehicle UI Development
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Wireless Connectivity Software En
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Fullstack Software Engineer - Fle
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Software Engineer - Energy Engine
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Application Engineering Co-op
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Junior Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Developer Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Co-op - Conversions API
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Recommendation Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: AI Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Campus Data Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer Intern - Applications Engineering
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: AI Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer Co-op
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Data Engineer Co-op
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Generative AI Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Applied Machine Learning-Enterpri
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: AI Engineer Intern
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Mecop
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Embedded Software Engineer Intern - Embedded Software Engine
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Embedded Software Engineer Intern - Embedded Software Engine
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern-Runtime - Robotics
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer Intern - Robotics
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Engineer, Link
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Fullstack Engineer, Privy
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Credit Cards & Banking
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Front-End Web Developer, B2B, Marketing Technology
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Fullstack
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer I, Entry-Level (Graduation Date: Fall 2025
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Fullstack Software Engineer, Notifications Lifecycle
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Application Software Engineer (C#/ Python), Data
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Flight Software Engineer (Starlink Mobile)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Application Software)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Application Software)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Application Software)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Application Software)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Build Reliability) 
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Components)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Constellation Tools (Starlink)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Data
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Data (Starlink)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Data (Starlink)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Observability (Starlink)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Starlink)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer (Starshield)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer - Top Secret Clearance
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Mobile Apps (Starlink) 
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer (Starlink Mobile)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer (Starlink Mobile) 
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Software Engineer, Reinforcement Learning
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Full Stack
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Mobile Web
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Analyst II, Full Stack (Credit Analytics)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Mobile Software Engineer, Lending
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: 2026 Early Career Flight Test Engineer, Altius
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: 2026 Early Career Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: 2027 Early Career Software Engineer 
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Frontend Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Software Engineer, Mission Autonomy  
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Mission Software Engineer, Air Vehicle Autonomy, Frontend
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Mission Software Engineer, Air Vehicle Autonomy, Frontend
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer - Mobile, Android
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Next.js
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer, New Grad - Commercial
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer, New Grad - Commercial
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Forward Deployed Software Engineer, New Grad - US Government
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer - Application Development
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer - Frontend Developer Productivity
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad - Defense
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad - Defense
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad - Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad - Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad - Production Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad - Production Infrastructure
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Mobile Engineer, Android
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Frontend
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Mobile Engineer, iOS
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Applied AI Engineer, Fullstack
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Full Stack (People Innovation)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack SWE, Data Acquisition (Foundations)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Engineer, Fleet Scheduling
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Engineer, Intelligence Systems
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Growth
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, GTM Innovation
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Full Stack, Revenue Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Codex Cloud Apps
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Fullstack Engineer, Safety Engineering
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Health AI
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Frontend Engineer, Financial Web Platform
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Solutions Engineer, Digital Natives (Strategics) 
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Solutions Engineer, Core Digital Native
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, OpenAI Edu
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Agent Enablement
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full-Stack Software Engineer, Applied Foundations
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Cybersecurity Products
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, API Experience 
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, ChatGPT ImageGen
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, Codex
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Software Engineer, ChatGPT Finances
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Founding Full Stack Software Engineer, Legal
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Full Stack Analyst, GTM
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, New Grad (AI)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Early Career (AI)
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Early Career
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Software Engineer, Mobile
+2026-07-21 15:38:54  [DEBUG   ]    DUPE skipped: Product Engineer, Product Platform (Frontend)
+2026-07-21 15:38:54  [INFO    ]  Deduplication: 16 new  |  283 duplicates removed
+2026-07-21 15:38:54  [INFO    ]  📄 Wrote 16 rows → jobs_2026-07-21.csv
+2026-07-21 15:38:54  [DEBUG   ]  Saved 1195 total seen IDs to seen_jobs.json
+2026-07-21 15:38:54  [INFO    ]  
+╔══════════════════════════════════════════════════════╗
+2026-07-21 15:38:54  [INFO    ]  ║                JOB HUNT DAILY REPORT                 ║
+2026-07-21 15:38:54  [INFO    ]  ║                      2026-07-21                      ║
+2026-07-21 15:38:54  [INFO    ]  ╠══════════════════════════════════════════════════════╣
+2026-07-21 15:38:54  [INFO    ]  ║  Jobs found:                 16                      ║
+2026-07-21 15:38:54  [INFO    ]  ║  Networking events:          0                       ║
+2026-07-21 15:38:54  [INFO    ]  ╠══════════════════════════════════════════════════════╣
+2026-07-21 15:38:54  [INFO    ]  ║  Source                 Count                         ║
+2026-07-21 15:38:54  [INFO    ]  ║  ────────────────────── ────────                      ║
+2026-07-21 15:38:54  [INFO    ]  ║  GitHub/NewGrad         11                            ║
+2026-07-21 15:38:54  [INFO    ]  ║  GitHub/Internship      2                             ║
+2026-07-21 15:38:54  [INFO    ]  ║  Ashby                  1                             ║
+2026-07-21 15:38:54  [INFO    ]  ║  Arbeitnow              1                             ║
+2026-07-21 15:38:54  [INFO    ]  ║  Greenhouse             1                             ║
+2026-07-21 15:38:54  [INFO    ]  ╠══════════════════════════════════════════════════════╣
+2026-07-21 15:38:54  [INFO    ]  ║  CSV: jobs_2026-07-21.csv                            ║
+2026-07-21 15:38:54  [INFO    ]  ╚══════════════════════════════════════════════════════╝
+
+2026-07-21 15:38:54  [INFO    ]  Done ✓
