@@ -29,6 +29,24 @@ your resume skills, entry-level signals, full-time, in-person and Minnesota.
 
 Sheet columns: `Last Update | Company | Job | Location | Status | Application | Job Type | LeetCode Prep`
 
+### 🎮 The game layer
+
+Job hunting, but with XP — so it's less of a grind:
+
+- **Level up** from *Resume Rookie* → *Recruiter Whisperer* → *OA Survivor* → … → *Final Boss of Job Hunting*.
+  XP comes only from real progress: ✓ applied **+50**, 🧠 LeetCode problem solved **+20** (tick it in any
+  prep panel), ★ saved **+10**, 🎮 job triaged **+2**, daily quests cleared **+50**, badge unlocked **+25**.
+  Un-marking something takes its XP back.
+- **Daily quests:** apply to 3 jobs, solve 2 LeetCode problems, triage 10 jobs — plus a 🔥 activity streak.
+- **🎮 Quick Play:** one job at a time, keyboard-driven — **←** pass, **↑** save, **→** open & apply
+  (it asks "did you submit?" before counting it). Combos, confetti, and a job-search tip each round.
+  It plays whatever tab + filters you have selected, so pick *Minnesota* or *Full-time · SWE* first.
+- **🏆 15 badges** — First Blood, Local Legend, Touch Grass (in-person), Explorer, Grinder, LeetCode Dragon,
+  Speed Runner, Night Owl…
+
+Progress lives in your browser (same as Applied/Saved marks); applying through Quick Play still
+auto-fills your Google Sheet.
+
 **One-time setup:** repo → Settings → Pages → Source: *Deploy from a branch* →
 Branch `main`, folder `/docs`. Your dashboard then lives at
 `https://officialchanhen.github.io/Job-Search-Script/` and refreshes daily.

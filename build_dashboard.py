@@ -272,6 +272,7 @@ HTML_TEMPLATE = r"""<!doctype html>
   }
 }
 * { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
 body {
   background: var(--plane); color: var(--ink-1);
   font: 15px/1.5 Inter, "SF Pro Text", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -460,6 +461,118 @@ button, input, select { font: inherit; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #toast.err { background: var(--crit); color: #fff; }
+/* ── 🎮 game HUD ────────────────────────────────────────── */
+.hud {
+  display: grid; grid-template-columns: 1.2fr 1.4fr auto; gap: 18px; align-items: center;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow-sm); padding: 16px 18px; margin-top: 16px;
+}
+.hud-player { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.lvl {
+  flex: none; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; align-content: center;
+  background: var(--series-1); color: #fff; font-weight: 750; font-size: 22px; line-height: 1;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,0.18); font-variant-numeric: tabular-nums;
+}
+.lvl small { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; margin-bottom: 3px; }
+.lvl.pop { animation: pop .6s ease; }
+@keyframes pop { 40% { transform: scale(1.18) rotate(-4deg); } }
+.hud-main { flex: 1; min-width: 0; }
+.hud-title { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-weight: 650; font-size: 15px; }
+.hud-title .xp { font-size: 12.5px; font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.xpbar { height: 10px; border-radius: 999px; background: var(--chip-bg); margin: 8px 0 6px; overflow: hidden; }
+.xpbar div { height: 100%; border-radius: 999px; background: var(--series-1); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.hud-next { font-size: 12px; color: var(--ink-3); }
+.hud-h { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); display: flex; justify-content: space-between; margin-bottom: 6px; }
+.hud-h .streak { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.quests { list-style: none; padding: 0; display: grid; gap: 5px; }
+.quests li { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.quests .ck {
+  width: 18px; height: 18px; border-radius: 6px; box-shadow: inset 0 0 0 1.5px var(--border-strong);
+  display: grid; place-items: center; font-size: 11px; color: #fff;
+}
+.quests li.done .ck { background: var(--good-mark); box-shadow: none; }
+.quests li.done .q { text-decoration: line-through; color: var(--ink-3); }
+.quests .n { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.hud-side { display: flex; flex-direction: column; gap: 8px; }
+.play-btn {
+  height: 44px; padding: 0 20px; border-radius: 12px; border: 0; cursor: pointer; font-weight: 700; font-size: 14.5px;
+  color: #fff; background: linear-gradient(135deg, var(--series-1), #4a3aa7);
+  box-shadow: 0 6px 16px -6px rgba(42,120,214,0.6), inset 0 1px 0 rgba(255,255,255,0.2);
+  transition: transform .15s;
+}
+.play-btn:hover { transform: translateY(-1px) scale(1.02); }
+.badge-btn {
+  height: 34px; border-radius: 10px; border: 1px solid var(--border); background: transparent;
+  color: var(--ink-2); cursor: pointer; font-size: 13px;
+}
+.badge-btn:hover { border-color: var(--series-1); color: var(--series-1); }
+.badges-panel {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 10px;
+}
+.badge { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.badge .ico { font-size: 22px; filter: grayscale(1); opacity: .35; }
+.badge.got .ico { filter: none; opacity: 1; }
+.badge b { display: block; font-size: 13px; }
+.badge span { font-size: 11.5px; color: var(--ink-3); }
+.badge.got { box-shadow: inset 0 0 0 1px var(--good-mark); }
+
+/* ── LeetCode solved checkboxes ─────────────────────────── */
+.prep li label { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; }
+.prep li input { accent-color: var(--good-mark); width: 15px; height: 15px; cursor: pointer; }
+.prep li.solved a { text-decoration: line-through; color: var(--ink-3); }
+.prep .solved-note { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+
+/* ── XP float + confetti ────────────────────────────────── */
+.xp-float {
+  position: fixed; z-index: 70; pointer-events: none; font-weight: 800; font-size: 15px; color: var(--good-mark);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.15); animation: floatup 1.1s ease-out forwards; font-variant-numeric: tabular-nums;
+}
+@keyframes floatup { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -48px); } }
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+
+/* ── 🎮 Quick Play overlay ──────────────────────────────── */
+.qp {
+  position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px 16px; background: rgba(8,8,8,0.62); backdrop-filter: blur(6px);
+}
+.qp[hidden] { display: none; }
+.qp-top { width: min(560px, 100%); display: flex; justify-content: space-between; align-items: center; color: #fff; font-size: 13px; margin-bottom: 10px; }
+.qp-top button { background: rgba(255,255,255,0.12); color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.qp-combo { font-weight: 800; color: #fab219; min-width: 80px; text-align: center; }
+.qp-card {
+  width: min(560px, 100%); background: var(--surface-1); color: var(--ink-1); border-radius: 20px; padding: 22px 22px 18px;
+  box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5); transition: transform .22s ease, opacity .22s ease; min-height: 280px;
+}
+.qp-card.fly-left { transform: translateX(-120%) rotate(-10deg); opacity: 0; }
+.qp-card.fly-right { transform: translateX(120%) rotate(10deg); opacity: 0; }
+.qp-card.fly-up { transform: translateY(-110%) scale(.9); opacity: 0; }
+.qp-card .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.qp-card h3 { font-size: 20px; letter-spacing: -0.02em; line-height: 1.25; }
+.qp-card .meta { font-size: 14px; margin-top: 4px; }
+.qp-card .badges { margin-top: 12px; }
+.qp-card .focus { margin-top: 14px; font-size: 13px; color: var(--ink-2); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+.qp-card .focus ol { margin: 6px 0 0; padding-left: 20px; }
+.qp-card .empty-deck { text-align: center; padding: 50px 0; font-size: 16px; }
+.qp-controls, .qp-confirm { width: min(560px, 100%); display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 10px; margin-top: 14px; }
+.qp-confirm { grid-template-columns: 1.4fr 1fr; background: var(--surface-1); border-radius: 16px; padding: 12px; color: var(--ink-1); }
+.qp-confirm p { grid-column: 1 / -1; font-weight: 600; text-align: center; }
+.qp-controls button, .qp-confirm button {
+  height: 50px; border-radius: 14px; border: 0; cursor: pointer; font-weight: 700; font-size: 15px;
+  background: var(--surface-1); color: var(--ink-1); box-shadow: var(--shadow-md); transition: transform .12s;
+}
+.qp-controls button:hover, .qp-confirm button:hover { transform: translateY(-2px); }
+.qp-controls .pass { color: var(--crit); }
+.qp-controls .save { color: #b07800; }
+.qp-controls .go, .qp-confirm .yes { background: var(--series-1); color: #fff; }
+.qp-hint { color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 12px; text-align: center; }
+.qp-tip { color: rgba(255,255,255,0.85); font-size: 12.5px; margin-top: 6px; text-align: center; max-width: 560px; }
+@media (max-width: 760px) {
+  .hud { grid-template-columns: 1fr; }
+  .hud-side { flex-direction: row; }
+  .play-btn { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .qp-card, .xpbar div { transition: none; } .lvl.pop, .xp-float { animation: none; } }
 @media (max-width: 640px) {
   body { padding-top: 16px; }
   .hero { padding: 20px; border-radius: 16px; }
@@ -480,6 +593,25 @@ button, input, select { font: inherit; }
     <div class="summary" id="summary"></div>
     <div class="sub">Updated __GENERATED__ · latest scrape __LATEST_DAY__ · US only · ranked by skill match, full-time, in-person</div>
   </header>
+    <section class="hud" id="hud" aria-label="Job hunt progress">
+      <div class="hud-player">
+        <div class="lvl" id="hudLvl"><small>Lv</small>1</div>
+        <div class="hud-main">
+          <div class="hud-title"><span id="hudTitle">Resume Rookie</span><span class="xp" id="hudXp"></span></div>
+          <div class="xpbar" role="progressbar" aria-label="XP to next level" id="hudBarWrap"><div id="hudBar" style="width:0"></div></div>
+          <div class="hud-next" id="hudNext"></div>
+        </div>
+      </div>
+      <div>
+        <div class="hud-h">Daily quests <span class="streak" id="hudStreak"></span></div>
+        <ul class="quests" id="hudQuests"></ul>
+      </div>
+      <div class="hud-side">
+        <button class="play-btn" id="playBtn" title="Triage jobs one at a time — keyboard friendly">🎮 Quick Play</button>
+        <button class="badge-btn" id="badgeBtn">🏆 <span id="hudBadges"></span></button>
+      </div>
+    </section>
+    <div class="badges-panel" id="badgesPanel" hidden></div>
 
   <div class="tiles" id="tiles"></div>
 
@@ -535,6 +667,23 @@ button, input, select { font: inherit; }
   <button class="loadmore" id="loadMore" hidden>Show more</button>
 </div>
 <div id="toast"></div>
+<div class="qp" id="qp" hidden role="dialog" aria-modal="true" aria-label="Quick Play">
+  <div class="qp-top"><span id="qpLeft"></span><span class="qp-combo" id="qpCombo"></span><button id="qpClose">✕ Esc</button></div>
+  <div class="qp-card" id="qpCard"></div>
+  <div class="qp-controls" id="qpControls">
+    <button class="pass" data-act="pass">← Pass</button>
+    <button class="save" data-act="save">↑ Save</button>
+    <button class="go" data-act="apply">Open &amp; apply →</button>
+  </div>
+  <div class="qp-confirm" id="qpConfirm" hidden>
+    <p>Did you submit the application?</p>
+    <button class="yes" data-act="yes">✓ Yes, applied <small>(Enter)</small></button>
+    <button data-act="later">Not yet, save it</button>
+  </div>
+  <div class="qp-hint">← pass · ↑ save · → open &amp; apply · Esc to exit — works on your current tab &amp; filters</div>
+  <div class="qp-tip" id="qpTip"></div>
+</div>
+<canvas id="confetti"></canvas>
 
 <script>
 const JOBS = __JOBS_JSON__;
@@ -551,16 +700,18 @@ try { statusMap = JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch (e) 
 try { syncedSet = JSON.parse(localStorage.getItem(LS_SYNCED) || "{}"); } catch (e) {}
 let sheetUrl = localStorage.getItem(LS_URL) || "";
 
-function setStatus(id, s) {
+function setStatus(id, s, opts) {
   const prev = (statusMap[id] || {}).s || "";
-  if (s) statusMap[id] = { s, t: new Date().toISOString().slice(0, 10) };
+  if (s) statusMap[id] = { s, t: localDay() };
   else delete statusMap[id];
-  localStorage.setItem(LS_KEY, JSON.stringify(statusMap));
+  try { localStorage.setItem(LS_KEY, JSON.stringify(statusMap)); } catch (e) {}
   // Auto-fill the Google Sheet the first time a job becomes "Applied"
   if (s === "applied" && prev !== "applied") {
+    game.times = [...game.times, new Date().getHours()].slice(-50);
     const job = JOBS.find(j => j.id === id);
     if (job) syncToSheet(job);
   }
+  if (!(opts && opts.quiet)) floatXP(statusXP(prev, s));
   render();
 }
 const st = id => (statusMap[id] || {}).s || "";
@@ -674,6 +825,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 function render() {
   renderTiles();
   renderTabs();
+  checkProgress();
   const rows = filtered();
   document.getElementById("countNote").textContent = "Showing " +
     rows.length + (jobType && jobType !== "?" ? " " + jobType.toLowerCase() : "") +
@@ -685,11 +837,9 @@ function render() {
   document.getElementById("loadMore").hidden = rows.length <= shown;
 }
 
-function card(j) {
-  const s = st(j.id);
-  const cls = s === "applied" ? "job applied" : s === "saved" ? "job saved" : "job";
+function cardBadges(j) {
   const modeBadge = { onsite: "🏢 In-person", hybrid: "🔀 Hybrid", remote: "🌐 Remote" }[j.mode] || "";
-  const badges = [
+  return [
     j.date === LATEST ? '<span class="chip flag-new">NEW</span>' : "",
     j.local ? '<span class="chip flag-local">📍 Minnesota</span>' : "",
     '<span class="chip ' + (j.jobType === "Full-time" ? "type-ft" : "type-other") + '">' + esc(j.jobType || "Type ?") + "</span>",
@@ -700,6 +850,12 @@ function card(j) {
     ...j.chips.map(c => '<span class="chip">' + esc(c) + "</span>"),
     '<span class="chip muted">' + esc(j.source) + " · " + esc(j.date) + "</span>",
   ].join("");
+}
+
+function card(j) {
+  const s = st(j.id);
+  const cls = s === "applied" ? "job applied" : s === "saved" ? "job saved" : "job";
+  const badges = cardBadges(j);
   return `<div class="${cls}">
     <div class="score ${j.score >= 10 ? "hot" : ""}" title="Match score: skills, entry-level, full-time, in-person, Minnesota">${j.score}<small>match</small></div>
     <div>
@@ -722,7 +878,8 @@ function card(j) {
 function prepPanel(p) {
   const list = p.problems.length
     ? "<ol>" + p.problems.map(([n, name, url]) =>
-        `<li><a href="${esc(url)}" target="_blank" rel="noopener">#${n} ${esc(name)}</a></li>`).join("") + "</ol>"
+        `<li class="${game.solved[n] ? "solved" : ""}"><label><input type="checkbox" ${game.solved[n] ? "checked" : ""} onchange="toggleSolved(${n}, this)" aria-label="Mark #${n} solved"><a href="${esc(url)}" target="_blank" rel="noopener">#${n} ${esc(name)}</a></label></li>`).join("") + "</ol>" +
+      '<div class="solved-note">Tick a problem when you solve it: +20 XP. Solved problems stay ticked on every job.</div>'
     : '<div class="none">No LeetCode needed for this role type.</div>';
   return `<div class="prep"><div class="focus"><strong>${p.coding ? "Coding interview likely." : "Usually no coding interview."}</strong> ${esc(p.focus)}</div>${list}</div>`;
 }
@@ -860,6 +1017,287 @@ const catSel = document.getElementById("cat");
 const srcSel = document.getElementById("source");
 [...new Set(JOBS.map(j => j.source))].sort().forEach(s => {
   const o = document.createElement("option"); o.value = o.textContent = s; srcSel.append(o);
+});
+
+/* ═══ 🎮 GAME LAYER ═══════════════════════════════════════════
+   XP is derived from real progress (applications, saves, solved
+   LeetCode problems, Quick Play triage, daily clears, badges), so
+   un-marking something takes its XP back — no farming.          */
+const LS_GAME = "chan-job-game-v1";
+let game = { solved: {}, triaged: 0, triDay: "", triToday: 0, unlocked: {}, clears: {}, lastLevel: 1, times: [], init: false };
+try { Object.assign(game, JSON.parse(localStorage.getItem(LS_GAME) || "{}")); } catch (e) {}
+function saveGame() { try { localStorage.setItem(LS_GAME, JSON.stringify(game)); } catch (e) {} }
+const JOB_BY_ID = Object.fromEntries(JOBS.map(j => [j.id, j]));
+const REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const TITLES = ["Resume Rookie", "Cover Letter Cadet", "Networking Novice", "Recruiter Whisperer",
+  "OA Survivor", "Phone-Screen Pro", "Onsite Warrior", "Offer Magnet", "Negotiation Ninja",
+  "Final Boss of Job Hunting"];
+const levelStart = n => 50 * n * (n - 1);          // L2 = 100 XP, L3 = 300, L4 = 600, L5 = 1000 …
+function levelFor(xp) { let n = 1; while (xp >= levelStart(n + 1)) n++; return n; }
+const titleFor = n => TITLES[Math.min(n, TITLES.length) - 1] + (n > TITLES.length ? " " + "★".repeat(Math.min(n - TITLES.length, 5)) : "");
+
+const TIPS = [
+  "Tailor the top 3 resume bullets to the job title — it's the part recruiters actually read.",
+  "Apply within 48 hours of a posting going live; early applicants get screened first.",
+  "Found someone on the team? A 2-line LinkedIn note beats a cover letter.",
+  "Local roles (📍) have far fewer applicants than remote ones.",
+  "One LeetCode medium a day beats a 6-hour weekend cram.",
+  "“Engineer I” and “Associate” roles don't care when you graduated — only that you're early career.",
+  "Say your approach out loud while you code — interviewers grade communication too.",
+  "Keep a STAR story ready for: a bug you fixed, a conflict, and something you shipped.",
+];
+
+const BADGES = [
+  ["first",   "🩸", "First Blood",     "Submit your first application",       s => s.applied >= 1],
+  ["ten",     "🔟", "Double Digits",   "10 applications",                     s => s.applied >= 10],
+  ["fifty",   "🚀", "Half-Century",    "50 applications",                     s => s.applied >= 50],
+  ["hundred", "💯", "Centurion",       "100 applications",                    s => s.applied >= 100],
+  ["local",   "📍", "Local Legend",    "Apply to 3 Minnesota jobs",           s => s.local >= 3],
+  ["grass",   "🏢", "Touch Grass",     "Apply to 5 in-person jobs",           s => s.onsite >= 5],
+  ["explore", "🧭", "Explorer",        "Apply across 4 role categories",      s => s.cats >= 4],
+  ["streak3", "🔥", "On Fire",         "3-day activity streak",               s => s.streak >= 3],
+  ["streak7", "🌋", "Unstoppable",     "7-day activity streak",               s => s.streak >= 7],
+  ["lc10",    "🧠", "Grinder",         "Solve 10 LeetCode problems",          s => s.solved >= 10],
+  ["lc50",    "🐉", "LeetCode Dragon", "Solve 50 LeetCode problems",          s => s.solved >= 50],
+  ["speed",   "⚡", "Speed Runner",    "Triage 25 jobs in Quick Play",        s => game.triaged >= 25],
+  ["clear",   "🎯", "Quest Clear",     "Finish all daily quests once",        s => s.clears >= 1],
+  ["early",   "🌅", "Early Bird",      "Apply before 9 AM",                   s => game.times.some(h => h < 9)],
+  ["owl",     "🦉", "Night Owl",       "Apply after 11 PM",                   s => game.times.some(h => h >= 23)],
+];
+
+function localDay(d) {
+  d = d || new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function gameStats() {
+  const today = localDay();
+  const entries = Object.entries(statusMap);
+  const appliedIds = entries.filter(([, v]) => v.s === "applied").map(([k]) => k);
+  const appliedJobs = appliedIds.map(id => JOB_BY_ID[id]).filter(Boolean);
+  const solvedDays = Object.values(game.solved);
+  // activity streak: consecutive days (ending today or yesterday) with an application or a solve
+  const active = new Set([...entries.filter(([, v]) => v.s === "applied").map(([, v]) => v.t), ...solvedDays]);
+  let streak = 0; const d = new Date();
+  if (!active.has(localDay(d))) d.setDate(d.getDate() - 1);
+  while (active.has(localDay(d))) { streak++; d.setDate(d.getDate() - 1); }
+  const s = {
+    applied: appliedIds.length,
+    saved: entries.filter(([, v]) => v.s === "saved").length,
+    solved: solvedDays.length,
+    appliedToday: entries.filter(([, v]) => v.s === "applied" && v.t === today).length,
+    solvedToday: solvedDays.filter(x => x === today).length,
+    triagedToday: game.triDay === today ? game.triToday : 0,
+    local: appliedJobs.filter(j => j.local).length,
+    onsite: appliedJobs.filter(j => j.mode === "onsite").length,
+    cats: new Set(appliedJobs.map(j => j.cat)).size,
+    clears: Object.keys(game.clears).length,
+    streak, today,
+  };
+  s.quests = [
+    ["Apply to 3 jobs", s.appliedToday, 3],
+    ["Solve 2 LeetCode problems", s.solvedToday, 2],
+    ["Triage 10 jobs in Quick Play", s.triagedToday, 10],
+  ];
+  s.xp = s.applied * 50 + s.saved * 10 + s.solved * 20 + game.triaged * 2 +
+         s.clears * 50 + Object.keys(game.unlocked).length * 25;
+  return s;
+}
+
+/* Detect unlocks / level-ups and celebrate them (silently on first ever load). */
+function checkProgress() {
+  let s = gameStats();
+  const quiet = !game.init;
+  if (s.quests.every(([, n, goal]) => n >= goal) && !game.clears[s.today]) {
+    game.clears[s.today] = 1;
+    if (!quiet) { toast("🎯 All daily quests cleared! +50 XP"); confetti(160); }
+  }
+  s = gameStats();
+  const fresh = BADGES.filter(([id, , , , test]) => !game.unlocked[id] && test(s));
+  fresh.forEach(([id, ico, name]) => {
+    game.unlocked[id] = s.today;
+    if (!quiet) setTimeout(() => { toast(`${ico} Badge unlocked: ${name}! +25 XP`); confetti(120); }, 300);
+  });
+  s = gameStats();
+  const lvl = levelFor(s.xp);
+  if (lvl > game.lastLevel && !quiet) {
+    setTimeout(() => {
+      toast(`⬆ Level ${lvl}! You're now a ${titleFor(lvl)}`);
+      confetti(260);
+      const el = document.getElementById("hudLvl");
+      el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+    }, fresh.length ? 1400 : 200);
+  }
+  game.lastLevel = lvl;
+  game.init = true;
+  saveGame();
+  renderHUD(s);
+}
+
+function renderHUD(s) {
+  s = s || gameStats();
+  const lvl = levelFor(s.xp), lo = levelStart(lvl), hi = levelStart(lvl + 1);
+  const pct = Math.round((s.xp - lo) / (hi - lo) * 100);
+  document.getElementById("hudLvl").innerHTML = `<small>Lv</small>${lvl}`;
+  document.getElementById("hudTitle").textContent = titleFor(lvl);
+  document.getElementById("hudXp").textContent = `${s.xp.toLocaleString()} XP`;
+  document.getElementById("hudBar").style.width = pct + "%";
+  const wrap = document.getElementById("hudBarWrap");
+  wrap.setAttribute("aria-valuenow", pct); wrap.setAttribute("aria-valuemin", 0); wrap.setAttribute("aria-valuemax", 100);
+  document.getElementById("hudNext").textContent =
+    `${(hi - s.xp).toLocaleString()} XP to Lv ${lvl + 1} · ✓ applied +50 · 🧠 solved +20 · ★ saved +10 · 🎮 triaged +2`;
+  document.getElementById("hudStreak").textContent = s.streak ? `🔥 ${s.streak}-day streak` : "Start a streak today";
+  document.getElementById("hudQuests").innerHTML = s.quests.map(([q, n, goal]) =>
+    `<li class="${n >= goal ? "done" : ""}"><span class="ck">${n >= goal ? "✓" : ""}</span><span class="q">${q}</span><span class="n">${Math.min(n, goal)}/${goal}</span></li>`).join("");
+  const got = Object.keys(game.unlocked).length;
+  document.getElementById("hudBadges").textContent = `${got}/${BADGES.length} badges`;
+  const panel = document.getElementById("badgesPanel");
+  if (!panel.hidden) panel.innerHTML = BADGES.map(([id, ico, name, desc]) =>
+    `<div class="badge ${game.unlocked[id] ? "got" : ""}"><span class="ico">${ico}</span><div><b>${name}</b><span>${game.unlocked[id] ? "Unlocked " + game.unlocked[id] : desc}</span></div></div>`).join("");
+}
+
+/* ── juice: floating XP + confetti ─────────────────────────── */
+let lastPt = { x: innerWidth / 2, y: innerHeight / 2 };
+document.addEventListener("pointerdown", e => { lastPt = { x: e.clientX, y: e.clientY }; }, true);
+function floatXP(n, pt) {
+  if (!n) return;
+  pt = pt || lastPt;
+  const el = document.createElement("div");
+  el.className = "xp-float";
+  el.textContent = (n > 0 ? "+" : "") + n + " XP";
+  if (n < 0) el.style.color = "var(--ink-3)";
+  el.style.left = pt.x + "px"; el.style.top = (pt.y - 12) + "px";
+  document.body.append(el);
+  setTimeout(() => el.remove(), 1200);
+}
+const CONFETTI_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7"];
+let confettiParts = [], confettiRAF = 0;
+function confetti(n) {
+  if (REDUCED) return;
+  const cv = document.getElementById("confetti"), ctx = cv.getContext("2d");
+  cv.width = innerWidth * devicePixelRatio; cv.height = innerHeight * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  for (let i = 0; i < n; i++) confettiParts.push({
+    x: innerWidth / 2 + (Math.random() - .5) * 200, y: innerHeight * .35,
+    vx: (Math.random() - .5) * 14, vy: -Math.random() * 13 - 4, r: Math.random() * Math.PI,
+    vr: (Math.random() - .5) * .3, w: 6 + Math.random() * 6, h: 3 + Math.random() * 4,
+    c: CONFETTI_COLORS[i % CONFETTI_COLORS.length], life: 0,
+  });
+  if (confettiRAF) return;
+  const tick = () => {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    confettiParts.forEach(p => {
+      p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr; p.life++;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c;
+      ctx.globalAlpha = Math.max(0, 1 - p.life / 140); ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    });
+    confettiParts = confettiParts.filter(p => p.life < 140 && p.y < innerHeight + 40);
+    confettiRAF = confettiParts.length ? requestAnimationFrame(tick) : (ctx.clearRect(0, 0, innerWidth, innerHeight), 0);
+  };
+  confettiRAF = requestAnimationFrame(tick);
+}
+
+/* XP delta for a status change, shown as a float */
+function statusXP(prev, s) { const v = { applied: 50, saved: 10 }; return (v[s] || 0) - (v[prev] || 0); }
+
+/* ── LeetCode solved toggles (global per problem) ──────────── */
+function toggleSolved(n, el) {
+  if (game.solved[n]) { delete game.solved[n]; floatXP(-20); }
+  else { game.solved[n] = localDay(); floatXP(20); if (!REDUCED) confetti(24); }
+  saveGame();
+  render();
+}
+
+/* ── 🎮 Quick Play ─────────────────────────────────────────── */
+let qpDeck = [], qpIdx = 0, qpCombo = 0, qpLastAt = 0, qpBusy = false;
+function qpOpen() {
+  qpDeck = filtered().filter(j => !st(j.id));
+  qpIdx = 0; qpCombo = 0;
+  document.getElementById("qp").hidden = false;
+  document.body.style.overflow = "hidden";
+  document.getElementById("qpTip").textContent = "💡 " + TIPS[Math.floor(Math.random() * TIPS.length)];
+  qpShow();
+}
+function qpClose() {
+  document.getElementById("qp").hidden = true;
+  document.body.style.overflow = "";
+  render();
+}
+function qpCur() { return qpDeck[qpIdx]; }
+function qpShow() {
+  const card = document.getElementById("qpCard");
+  card.className = "qp-card";
+  document.getElementById("qpConfirm").hidden = true;
+  document.getElementById("qpControls").hidden = false;
+  const j = qpCur();
+  document.getElementById("qpLeft").textContent = j ? `${qpDeck.length - qpIdx} left in this view` : "";
+  document.getElementById("qpCombo").textContent = qpCombo >= 3 ? `🔥 combo ×${qpCombo}` : "";
+  if (!j) {
+    card.innerHTML = `<div class="empty-deck">🎉 <b>Inbox zero!</b><br><span class="count-note">You've triaged every job in this view. Try another tab or job type.</span></div>`;
+    document.getElementById("qpControls").hidden = true;
+    if (qpDeck.length) confetti(200);
+    return;
+  }
+  const p = PREPS[j.prep];
+  const probs = p.problems.slice(0, 3).map(([n, name]) => `<li>${game.solved[n] ? "✅" : ""} #${n} ${esc(name)}</li>`).join("");
+  card.innerHTML = `
+    <div class="top">
+      <div>
+        <h3>${esc(j.title)}</h3>
+        <div class="meta"><span class="co">${esc(j.company) || "—"}</span><span class="dot">·</span>${esc(j.location)}</div>
+      </div>
+      <div class="score ${j.score >= 10 ? "hot" : ""}">${j.score}<small>match</small></div>
+    </div>
+    <div class="badges">${cardBadges(j)}</div>
+    <div class="focus"><b>${p.coding ? "🧠 Coding interview likely" : "🗣 Usually no coding round"}</b> — ${esc(p.focus)}${probs ? `<ol>${probs}</ol>` : ""}</div>`;
+}
+function qpNext(dir, xp) {
+  const now = Date.now();
+  qpCombo = now - qpLastAt < 12000 ? qpCombo + 1 : 1;
+  qpLastAt = now;
+  const t = localDay();
+  if (game.triDay !== t) { game.triDay = t; game.triToday = 0; }
+  game.triaged++; game.triToday++;
+  saveGame();
+  const r = document.getElementById("qpCard").getBoundingClientRect();
+  floatXP(xp + 2, { x: r.left + r.width / 2, y: r.top + 30 });
+  if (qpCombo > 0 && qpCombo % 10 === 0) confetti(90);
+  qpBusy = true;
+  document.getElementById("qpCard").classList.add("fly-" + dir);
+  setTimeout(() => { qpIdx++; qpBusy = false; qpShow(); checkProgress(); }, REDUCED ? 0 : 230);
+}
+function qpAct(act) {
+  const j = qpCur();
+  if (!j || qpBusy) return;
+  if (act === "pass") { setStatus(j.id, "hidden", { quiet: true }); qpNext("left", 0); }
+  else if (act === "save") { setStatus(j.id, "saved", { quiet: true }); qpNext("up", 10); }
+  else if (act === "apply") {
+    window.open(j.url, "_blank", "noopener");
+    document.getElementById("qpControls").hidden = true;
+    document.getElementById("qpConfirm").hidden = false;
+  } else if (act === "yes") { setStatus(j.id, "applied", { quiet: true }); qpNext("right", 50); }
+  else if (act === "later") { setStatus(j.id, "saved", { quiet: true }); qpNext("up", 10); }
+}
+document.getElementById("qp").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (b) qpAct(b.dataset.act);
+});
+document.getElementById("qpClose").onclick = qpClose;
+document.getElementById("playBtn").onclick = qpOpen;
+document.getElementById("badgeBtn").onclick = () => {
+  const p = document.getElementById("badgesPanel"); p.hidden = !p.hidden; renderHUD();
+};
+document.addEventListener("keydown", e => {
+  if (document.getElementById("qp").hidden) return;
+  const confirming = !document.getElementById("qpConfirm").hidden;
+  if (e.key === "Escape") qpClose();
+  else if (confirming && e.key === "Enter") qpAct("yes");
+  else if (confirming && (e.key === "ArrowUp" || e.key === "Backspace")) qpAct("later");
+  else if (!confirming && e.key === "ArrowLeft") qpAct("pass");
+  else if (!confirming && e.key === "ArrowUp") qpAct("save");
+  else if (!confirming && e.key === "ArrowRight") qpAct("apply");
+  else return;
+  e.preventDefault();
 });
 
 refreshSyncUI();
