@@ -6,6 +6,7 @@ Target: US-only, full-time-first, SWE + tech-adjacent roles that need little
 to no experience. Internships are excluded everywhere.
 """
 
+import hashlib
 import html
 import re
 
@@ -399,3 +400,20 @@ def classify_work_mode(location: str, explicit: str = "") -> str:
     if not loc.strip() or REMOTE_LOC_RE.search(loc):
         return "remote"
     return "onsite"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  URL KEY  (closed-job detection: "is this posting still on its board?")
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TRACKING_PARAM = re.compile(r"^(utm_[a-z_]+|ref|source|gh_src|lever-source|src)$", re.IGNORECASE)
+
+
+def url_key(url: str) -> str:
+    """10-char hash of a posting URL with tracking params (utm_*, ref=…) removed,
+    so the same posting linked from different lists matches."""
+    u = (url or "").strip()
+    base, _, query = u.partition("?")
+    keep = [kv for kv in query.split("&") if kv and not _TRACKING_PARAM.match(kv.split("=", 1)[0])]
+    norm = base.rstrip("/").lower() + ("?" + "&".join(sorted(keep)) if keep else "")
+    return hashlib.md5(norm.encode()).hexdigest()[:10]

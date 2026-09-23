@@ -50,7 +50,7 @@ from bs4 import BeautifulSoup
 from job_rules import (
     MAX_YEARS, STRICT_MAX_YEARS, classify_work_mode, experience_label, html_to_text,
     infer_job_type, is_junior_title, is_target_title, is_us_location,
-    max_years_required, min_years_required, role_category,
+    max_years_required, min_years_required, role_category, url_key,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -61,6 +61,7 @@ BASE_DIR  = Path(__file__).parent
 DATA_DIR  = BASE_DIR / "data"
 LOGS_DIR  = BASE_DIR / "logs"
 SEEN_FILE = DATA_DIR / "seen_jobs.json"
+LIVE_FILE = DATA_DIR / "live_jobs.json"   # which postings are still up, per board
 
 DATA_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
@@ -244,6 +245,37 @@ def make_id(title: str, company: str, url: str = "") -> str:
     """Stable 12-char hash used as a job's unique ID."""
     raw = f"{title.lower().strip()}|{company.lower().strip()}|{url.strip()}"
     return hashlib.md5(raw.encode()).hexdigest()[:12]
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  LIVE POSTINGS  (every posting currently on a fully-listed board, unfiltered)
+#  The dashboard marks older jobs "closed" once they drop off their board.
+# ─────────────────────────────────────────────────────────────────────────────
+
+LIVE: dict[str, dict[str, set[str]]] = {}
+
+
+def mark_live(source: str, company: str, url: str) -> None:
+    if url and company:
+        LIVE.setdefault(source, {}).setdefault(company.strip().lower(), set()).add(url_key(url))
+
+
+def save_live() -> None:
+    """Merge today's boards into live_jobs.json, per company. A board that
+    failed today keeps its older snapshot (and date), so it's never mistaken
+    for "every job closed"."""
+    data: dict = {}
+    if LIVE_FILE.exists():
+        try:
+            data = json.loads(LIVE_FILE.read_text(encoding="utf-8"))
+        except ValueError:
+            data = {}
+    for source, companies in LIVE.items():
+        src = data.setdefault(source, {})
+        for company, keys in companies.items():
+            src[company] = {"d": TODAY, "h": sorted(keys)}
+    LIVE_FILE.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+    n = sum(len(c) for c in LIVE.values())
+    log.info(f"🟢 Live-posting snapshot: {n} boards → {LIVE_FILE.name}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  HELPERS
@@ -865,6 +897,7 @@ def fetch_simplify_newgrad() -> list[dict]:
     for item in items:
         if not (item.get("active") and item.get("is_visible")):
             continue
+        mark_live("GitHub/Simplify", item.get("company_name", ""), item.get("url", ""))
         if float(item.get("date_posted") or 0) < cutoff:
             continue
         if item.get("category") in ("Hardware", "Quant", "Product"):
@@ -946,6 +979,7 @@ def fetch_markdown_newgrad() -> list[dict]:
             if not m:
                 continue            # no link → closed position
             url = m.group(1) or m.group(2)
+            mark_live(label, company, url)
             age = _md_cell_text(cell("age", "posted", "date"))
             days = _age_days(age)
             if days is not None and days > NEW_GRAD_MAX_AGE_DAYS:
@@ -1019,6 +1053,7 @@ def fetch_greenhouse_boards() -> list[dict]:
         for item in items:
             title    = item.get("title", "")
             location = (item.get("location") or {}).get("name", "")
+            mark_live("Greenhouse", item.get("company_name") or slug.title(), item.get("absolute_url", ""))
             if not is_target_title(title):          # cheap check before parsing HTML
                 continue
             offices = ", ".join(o.get("name", "") for o in item.get("offices") or [])
@@ -1067,6 +1102,7 @@ def fetch_lever_boards() -> list[dict]:
         for item in items:
             title = item.get("text", "")
             cats  = item.get("categories") or {}
+            mark_live("Lever", slug.title(), item.get("hostedUrl", ""))
             jt = infer_job_type(cats.get("commitment", ""), title, default="Full-time")
             if jt == "Internship":
                 continue
@@ -1115,6 +1151,7 @@ def fetch_ashby_boards() -> list[dict]:
 
         for item in items:
             title = item.get("title", "")
+            mark_live("Ashby", slug.title(), item.get("jobUrl", ""))
             jt = infer_job_type(item.get("employmentType", ""), title, default="Full-time")
             if jt == "Internship":
                 continue
@@ -1347,21 +1384,41 @@ def fetch_jsearch() -> list[dict]:
     queries = ["junior software engineer", "entry level software developer",
                "entry level data analyst", "associate software engineer Minneapolis",
                "entry level solutions engineer"]
+    headers = {"X-RapidAPI-Key": JSEARCH_KEY, "X-RapidAPI-Host": "jsearch.p.rapidapi.com"}
+    # JSearch moved job search to /search-v2 (cursor-paged); the old /search
+    # path 404s for new subscriptions. Try v2 first, fall back to v1.
+    endpoints = ["https://jsearch.p.rapidapi.com/search-v2",
+                 "https://jsearch.p.rapidapi.com/search"]
     for q in queries:
-        resp = get("https://jsearch.p.rapidapi.com/search", headers={
-            "X-RapidAPI-Key": JSEARCH_KEY,
-            "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
-        }, params={
-            "query": f"{q} in USA", "page": 1, "num_pages": 1, "country": "us",
+        params = {
+            "query": f"{q} in USA", "country": "us",
             "date_posted": "today", "employment_types": "FULLTIME",
             "job_requirements": "under_3_years_experience,no_experience",
-        }, timeout=30)
+        }
+        resp = None
+        for ep in list(endpoints):
+            try:
+                r = SESSION.get(ep, headers=headers, params=params, timeout=30)
+            except requests.RequestException as e:
+                log.warning(f"    JSearch request failed: {_redact(str(e))}")
+                break
+            if r.status_code == 404 and len(endpoints) > 1:
+                log.debug(f"    JSearch {ep.rsplit('/', 1)[-1]} → 404, trying next endpoint")
+                endpoints.remove(ep)     # remember for the remaining queries
+                continue
+            if r.status_code != 200:
+                log.warning(f"    JSearch HTTP {r.status_code}: {r.text[:120]}")
+                break
+            resp = r
+            break
         if resp is None:
             continue
         try:
-            items = resp.json().get("data", [])
+            data = resp.json().get("data", [])
         except ValueError:
             continue
+        # v1: {"data": [jobs]}  ·  v2: {"data": {"jobs": [...], "cursor": ...}}
+        items = data if isinstance(data, list) else (data.get("jobs") or data.get("data") or [])
         for it in items:
             title = it.get("job_title", "")
             if not is_target_title(title):
@@ -1587,6 +1644,7 @@ def main() -> None:
 
     seen.update(today_seen)
     save_seen(seen)
+    save_live()
     print_summary(new_rows)
     log.info("Done ✓")
 

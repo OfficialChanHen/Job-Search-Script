@@ -28,6 +28,25 @@ your resume skills, entry-level signals, full-time, in-person and Minnesota.
   **⬇ Export tracked** downloads Applied + Saved in the same order
 
 Sheet columns: `Last Update | Company | Job | Location | Status | Application | Job Type | LeetCode Prep`
+(the LeetCode Prep cell is the interview focus plus one `• #N Problem` bullet per line).
+
+### 🎯 Getting more replies
+
+- **🤝 Referral** on every job: one-click LinkedIn searches for UW–Madison alumni, recruiters and
+  engineers at that company, plus an editable ≤300-character outreach note to copy.
+  Mark **✉ I reached out** (+30 XP).
+- **📬 Follow-ups:** applications 7+ days old with no reply (from your ✓ Applied marks *and* your
+  sheet) with a ready-to-send follow-up message. ✓ Followed up: +15 XP.
+- **📈 Results:** interview rate from your sheet's Status column, broken down by channel,
+  location, role type and month — so you can apply where you actually get callbacks.
+  "Applied" rows older than 30 days count as no reply; a status like *Behavioral / Phone screen /
+  Interview / OA / Offer* counts as a response (and is worth +200 XP in the game).
+- **🔁 LeetCode reviews:** problems you tick as solved come back after 3, 7 and 14 days (+10 XP each).
+- **Ghost-job flags:** ⛔ *Closed* when a posting has disappeared from its company board (those are
+  hidden except in Saved/Applied), 🔁 *Posted N×* when the same title/company/location keeps being
+  re-posted, 📅 *30+ days old* when a listing can't be re-checked.
+- **Morning digest** (optional): the day's top 10 new matches — full-time and Minnesota first — plus
+  follow-ups due, pushed to your phone or inbox right after the daily run. Setup below.
 
 ### 🎮 The game layer
 
@@ -37,12 +56,13 @@ Job hunting, but with XP — so it's less of a grind:
   XP comes only from real progress: ✓ applied **+50**, 🧠 LeetCode problem solved **+20** (tick it in any
   prep panel), ★ saved **+10**, 🎮 job triaged **+2**, daily quests cleared **+50**, badge unlocked **+25**.
   Un-marking something takes its XP back.
-- **Daily quests:** apply to 3 jobs, solve 2 LeetCode problems, triage 10 jobs — plus a 🔥 activity streak.
+- **Daily quests:** apply to 3 jobs, solve or review 2 LeetCode problems, reach out or follow up once,
+  triage 10 jobs — plus a 🔥 activity streak.
 - **🎮 Quick Play:** one job at a time, keyboard-driven — **←** pass, **↑** save, **→** open & apply
   (it asks "did you submit?" before counting it). Combos, confetti, and a job-search tip each round.
   It plays whatever tab + filters you have selected, so pick *Minnesota* or *Full-time · SWE* first.
-- **🏆 15 badges** — First Blood, Local Legend, Touch Grass (in-person), Explorer, Grinder, LeetCode Dragon,
-  Speed Runner, Night Owl…
+- **🏆 20 badges** — First Blood, Local Legend, Touch Grass (in-person), Connector, Persistent,
+  Grinder, Spaced Out, Boss Battle (first interview), Offer!…
 
 Progress lives in your browser (same as Applied/Saved marks); applying through Quick Play still
 auto-fills your Google Sheet.
@@ -125,6 +145,17 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 You're eligible for **Pathways Recent Graduates** for 2 years after your degree
 (until about mid-2027).
 
+**Morning digest** — add the secret(s) for whichever channel you want (any combination works):
+
+| Secret | Channel |
+|---|---|
+| `NTFY_TOPIC` | [ntfy](https://ntfy.sh) push notifications — install the app, subscribe to a topic, use the same name here. Pick something unguessable (e.g. `chan-jobs-7f3k9q`): anyone who knows a topic name can read it. |
+| `DISCORD_WEBHOOK_URL` | Discord channel → Edit Channel → Integrations → Webhooks → New → Copy URL |
+| `SMTP_USER`, `SMTP_PASSWORD`, `DIGEST_EMAIL_TO` | Email. For Gmail: `SMTP_USER` = your address, `SMTP_PASSWORD` = an [App Password](https://myaccount.google.com/apppasswords) (needs 2-Step Verification), `DIGEST_EMAIL_TO` = where to send it |
+| `SHEET_EXEC_URL` | Your Apps Script `/exec` URL — adds "follow up today" to the digest |
+
+Preview it locally with `python notify.py --dry-run`.
+
 ### 2. Enable GitHub Actions
 
 **Actions** tab → enable workflows. The workflow runs automatically at 8 AM CST.
@@ -141,6 +172,7 @@ pip install -r requirements.txt
 python job_hunter.py                 # all sources
 python job_hunter.py linkedin dice   # just some sources (substring of fetch_* names)
 python build_dashboard.py
+python notify.py --dry-run           # preview the morning digest
 ```
 
 ---
@@ -151,6 +183,7 @@ python build_dashboard.py
 data/
   seen_jobs.json          ← tracks all seen IDs (prevents duplicates across days)
   jobs_2026-09-23.csv     ← that day's new listings
+  live_jobs.json          ← which postings are still up on each board (closed-job detection)
 logs/
   job_hunter_2026-09-23.log   ← full debug log for each run (API keys are redacted)
 ```

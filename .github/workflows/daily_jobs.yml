@@ -55,6 +55,18 @@ jobs:
       - name: Build dashboard
         run: python build_dashboard.py
 
+      # ── 5b. Morning digest (only if a channel secret is set — see README) ──
+      - name: Send morning digest
+        continue-on-error: true
+        env:
+          NTFY_TOPIC:          ${{ secrets.NTFY_TOPIC }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SMTP_USER:           ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD:       ${{ secrets.SMTP_PASSWORD }}
+          DIGEST_EMAIL_TO:     ${{ secrets.DIGEST_EMAIL_TO }}
+          SHEET_EXEC_URL:      ${{ secrets.SHEET_EXEC_URL }}
+        run: python notify.py
+
       # ── 6. Commit results back to the repo ─────────────────────────────────
       - name: Commit & push results
         run: |

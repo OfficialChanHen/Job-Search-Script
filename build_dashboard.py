@@ -31,13 +31,20 @@ from pathlib import Path
 from interview_prep import prep_for, prep_text
 from job_rules import (
     CATEGORY_LABEL, SWE_CATEGORIES, infer_job_type, is_target_title,
-    is_us_location, role_category,
+    is_us_location, role_category, url_key,
 )
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 DOCS_DIR = BASE_DIR / "docs"
 OUT_HTML = DOCS_DIR / "index.html"
+LIVE_FILE = DATA_DIR / "live_jobs.json"
+
+# Old CSV source labels that share a live-posting snapshot with a newer source
+LIVE_SOURCE_ALIAS = {"GitHub/NewGrad": "GitHub/Simplify"}
+LIVE_MAX_AGE_DAYS = 3       # only trust a board snapshot this fresh
+STALE_DAYS = 30             # untracked sources: older than this → "may be filled"
+REPOST_MIN = 3              # same title+company on this many different days → flag
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SKILL PROFILE  (resume + chanhen.space portfolio)
@@ -209,11 +216,63 @@ def load_jobs() -> list[dict]:
                     continue
                 seen_ids.add(jid)
                 jobs.append(classify_and_score(row))
+    flag_closed_and_reposts(jobs)
     # Best matches first, newest first within the same score
     jobs.sort(key=lambda j: (-j["score"], j["date"]), reverse=False)
     jobs.sort(key=lambda j: j["date"], reverse=True)
     jobs.sort(key=lambda j: -j["score"])
     return jobs
+
+
+def _days(a: str, b: str) -> int:
+    try:
+        return (datetime.strptime(b, "%Y-%m-%d") - datetime.strptime(a, "%Y-%m-%d")).days
+    except ValueError:
+        return 0
+
+
+def flag_closed_and_reposts(jobs: list[dict]) -> None:
+    """
+    closed  — the job's board was re-checked recently and the posting is gone
+    reposts — same title + company found on N different days (evergreen /
+              ghost-job signal: often never filled, or always "open")
+    stale   — source can't be re-checked and the listing is 30+ days old
+    """
+    latest = max((j["date"] for j in jobs), default="")
+    live: dict = {}
+    if LIVE_FILE.exists():
+        try:
+            live = json.loads(LIVE_FILE.read_text(encoding="utf-8"))
+        except ValueError:
+            live = {}
+    live_sets: dict[tuple[str, str], tuple[str, set]] = {}
+    for src, companies in live.items():
+        for comp, snap in companies.items():
+            live_sets[(src, comp)] = (snap.get("d", ""), set(snap.get("h", [])))
+
+    norm = lambda t: re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+    # title + company + location: big employers legitimately post many
+    # openings with the same title, but not the same one in the same city
+    # over and over
+    key = lambda j: norm(j["title"]) + "|" + norm(j["company"]) + "|" + norm(j["location"])
+    days_seen: dict[str, set[str]] = {}
+    for j in jobs:
+        days_seen.setdefault(key(j), set()).add(j["date"])
+
+    for j in jobs:
+        src = LIVE_SOURCE_ALIAS.get(j["source"], j["source"])
+        snap = live_sets.get((src, (j["company"] or "").strip().lower()))
+        tracked = bool(snap) and _days(snap[0], latest) <= LIVE_MAX_AGE_DAYS
+        j["closed"] = bool(tracked and j["date"] < snap[0] and url_key(j["url"]) not in snap[1])
+        j["reposts"] = len(days_seen[key(j)])
+        j["stale"] = (not tracked) and _days(j["date"], latest) > STALE_DAYS
+        if j["reposts"] >= REPOST_MIN:
+            j["score"] -= 1
+        if j["stale"]:
+            j["score"] -= 1
+    n_closed = sum(j["closed"] for j in jobs)
+    print(f"Closed postings detected: {n_closed} · reposted ≥{REPOST_MIN}×: "
+          f"{sum(j['reposts'] >= REPOST_MIN for j in jobs)} · stale: {sum(j['stale'] for j in jobs)}")
 
 
 def build_html(jobs: list[dict]) -> str:
@@ -517,6 +576,65 @@ button, input, select { font: inherit; }
 .badge span { font-size: 11.5px; color: var(--ink-3); }
 .badge.got { box-shadow: inset 0 0 0 1px var(--good-mark); }
 
+/* ── follow-ups / reviews / results panels ──────────────── */
+.hud-actions { display: flex; gap: 6px; }
+.hud-actions .badge-btn { flex: 1; white-space: nowrap; padding: 0 8px; }
+.badge-btn .dot-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--crit); color: #fff; font-size: 11px; font-weight: 700; margin-left: 4px; }
+.side-panel {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm);
+  padding: 16px 18px; margin-top: 10px; font-size: 13px;
+}
+.side-panel h2 { font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.side-panel h2 button { font-size: 12px; font-weight: 500; }
+.side-panel .lead { color: var(--ink-3); font-size: 12.5px; margin-bottom: 10px; }
+.fu-list { display: grid; gap: 8px; }
+.fu {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center;
+  padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
+}
+.fu b { font-size: 13.5px; }
+.fu .sub2 { color: var(--ink-3); font-size: 12px; }
+.fu .btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.mini {
+  font-size: 12px; height: 28px; padding: 0 10px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  background: transparent; border: 1px solid var(--border); color: var(--ink-2); display: inline-flex; align-items: center; text-decoration: none;
+}
+.mini:hover { border-color: var(--series-1); color: var(--series-1); }
+.mini.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.mini.ok { background: var(--good-mark); border-color: var(--good-mark); color: #fff; }
+.chip.flag-closed { background: var(--crit); color: #fff; font-weight: 600; }
+.chip.flag-sheet { background: var(--good-bg); color: var(--good); }
+.job.is-closed { opacity: .72; }
+
+/* referral panel */
+.ref { grid-column: 2 / -1; margin-top: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 13px; }
+.ref .links { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+.ref textarea {
+  width: 100%; min-height: 84px; resize: vertical; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface-1); color: var(--ink-1); padding: 8px 10px; font: inherit; font-size: 12.5px; line-height: 1.45;
+}
+.ref .row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.ref .cc { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ref .cc.over { color: var(--crit); font-weight: 600; }
+
+/* results */
+.res-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.res-kpis div { background: var(--surface-2); border-radius: 10px; padding: 9px 11px; }
+.res-kpis .l { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.res-kpis .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.stack { display: flex; gap: 2px; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-1); }
+.stack span { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 14px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.res-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.res-grid h3 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+.rrow { display: grid; grid-template-columns: minmax(90px, 1.1fr) 1.4fr auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.rrow .track { height: 8px; border-radius: 999px; background: var(--chip-bg); overflow: hidden; }
+.rrow .fill { height: 100%; border-radius: 999px; background: var(--series-1); }
+.rrow .num { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rrow .small { color: var(--ink-3); font-style: italic; }
+.insight { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--chip-bg); color: var(--ink-1); font-size: 13px; }
+
 /* ── LeetCode solved checkboxes ─────────────────────────── */
 .prep li label { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; }
 .prep li input { accent-color: var(--good-mark); width: 15px; height: 15px; cursor: pointer; }
@@ -608,10 +726,15 @@ button, input, select { font: inherit; }
       </div>
       <div class="hud-side">
         <button class="play-btn" id="playBtn" title="Triage jobs one at a time — keyboard friendly">🎮 Quick Play</button>
+        <div class="hud-actions">
+          <button class="badge-btn" id="fuBtn" title="Applications 7+ days old with no reply">📬 Follow-ups<span id="fuN"></span></button>
+          <button class="badge-btn" id="revBtn" title="LeetCode problems due for spaced review">🔁 Reviews<span id="revN"></span></button>
+        </div>
         <button class="badge-btn" id="badgeBtn">🏆 <span id="hudBadges"></span></button>
       </div>
     </section>
     <div class="badges-panel" id="badgesPanel" hidden></div>
+    <div class="side-panel" id="sidePanel" hidden></div>
 
   <div class="tiles" id="tiles"></div>
 
@@ -644,6 +767,7 @@ button, input, select { font: inherit; }
   <div class="bar-row">
     <div class="count-note" id="countNote"></div>
     <div class="toolbar">
+      <button id="resultsBtn" title="Response rates from your Google Sheet">📈 Results</button>
       <button id="syncBtn" title="Connect your Google Sheet">⚙ Sheet sync</button>
       <button id="exportBtn" title="Download Applied + Saved in your sheet's column order">⬇ Export tracked</button>
     </div>
@@ -654,6 +778,8 @@ button, input, select { font: inherit; }
     <p>When you mark a job <strong>✓ Applied</strong>, a row is added to your tracker sheet
        (Last Update · Company · Job · Location · Status · Application · Job Type · LeetCode Prep).
        Not connected? Use <strong>📋 Copy row</strong> on any job and paste into an empty row of the sheet.
+       Once connected, <strong>📈 Results</strong> and <strong>📬 Follow-ups</strong> read your sheet's Status column too
+       (needs the version-3 <code>Code.gs</code>).
        Paste your Apps Script <strong>Web App URL</strong> below — see the one-time setup in the repo's
        <code>sheet-sync/README.md</code>.</p>
     <div class="field">
@@ -790,6 +916,8 @@ function matchesTab(j) {
   const s = st(j.id);
   if (tab === "hidden") return s === "hidden";
   if (s === "hidden") return false;
+  // closed postings only stay visible where you're tracking them
+  if (j.closed && tab !== "saved" && tab !== "applied") return false;
   switch (tab) {
     case "new":     return j.date === LATEST;
     case "local":   return j.local;
@@ -846,6 +974,10 @@ function cardBadges(j) {
     modeBadge ? '<span class="chip flag-src">' + modeBadge + "</span>" : "",
     '<span class="chip flag-src">' + esc(j.catLabel) + "</span>",
     j.exp ? '<span class="chip flag-src">🎓 ' + esc(j.exp) + "</span>" : "",
+    j.closed ? '<span class="chip flag-closed" title="No longer on the company\'s job board">⛔ Closed</span>' : "",
+    j.reposts >= 3 ? `<span class="chip flag-warn" title="Same title, company and location posted on ${j.reposts} different days — high-volume hiring, or an evergreen/ghost listing. Worth a referral before applying.">🔁 Posted ${j.reposts}×</span>` : "",
+    j.stale ? '<span class="chip flag-src" title="Found 30+ days ago and this source can\'t be re-checked — may be filled">📅 30+ days old</span>' : "",
+    (() => { const r = sheetRowFor(j.url); return r && r.status ? '<span class="chip flag-sheet">📗 ' + esc(r.status) + "</span>" : ""; })(),
     j.gradWindow ? '<span class="chip flag-warn" title="New-grad posting — check the required graduation window; many also accept grads within 12–24 months">⚠ check grad window</span>' : "",
     ...j.chips.map(c => '<span class="chip">' + esc(c) + "</span>"),
     '<span class="chip muted">' + esc(j.source) + " · " + esc(j.date) + "</span>",
@@ -854,7 +986,7 @@ function cardBadges(j) {
 
 function card(j) {
   const s = st(j.id);
-  const cls = s === "applied" ? "job applied" : s === "saved" ? "job saved" : "job";
+  const cls = (s === "applied" ? "job applied" : s === "saved" ? "job saved" : "job") + (j.closed ? " is-closed" : "");
   const badges = cardBadges(j);
   return `<div class="${cls}">
     <div class="score ${j.score >= 10 ? "hot" : ""}" title="Match score: skills, entry-level, full-time, in-person, Minnesota">${j.score}<small>match</small></div>
@@ -866,12 +998,14 @@ function card(j) {
         <button class="${s === "applied" ? "on-applied" : ""}" onclick="setStatus('${j.id}','${s === "applied" ? "" : "applied"}')">✓ Applied${s === "applied" && statusMap[j.id] ? " " + statusMap[j.id].t.slice(5) : ""}</button>
         <button class="${s === "saved" ? "on-saved" : ""}" onclick="setStatus('${j.id}','${s === "saved" ? "" : "saved"}')">★ Save${s === "saved" ? "d" : ""}</button>
         <button class="${openPrep[j.id] ? "on" : ""}" onclick="togglePrep('${j.id}')">${PREPS[j.prep].coding ? "🧠 LeetCode prep" : "🧠 Interview prep"}</button>
+        <button class="${openRef[j.id] ? "on" : ""}" onclick="toggleRef('${j.id}')">🤝 Referral${game.outreach[j.id] ? " ✓" : ""}</button>
         <button onclick="copyRow('${j.id}')" title="Copy as a row for your Google Sheet">📋 Copy row</button>
         <button onclick="setStatus('${j.id}','${s === "hidden" ? "" : "hidden"}')">${s === "hidden" ? "↩ Unhide" : "Hide"}</button>
       </div>
     </div>
     <a class="apply-btn" href="${esc(j.url)}" target="_blank" rel="noopener">Apply ↗</a>
     ${openPrep[j.id] ? prepPanel(PREPS[j.prep]) : ""}
+    ${openRef[j.id] ? refPanel(j) : ""}
   </div>`;
 }
 
@@ -898,11 +1032,17 @@ function sheetRow(j, status, date) {
 function copyRow(id) {
   const j = JOBS.find(x => x.id === id);
   const s = st(id);
-  const tsv = sheetRow(j, s === "applied" ? "Applied" : s === "saved" ? "Saved" : "Applied")
-    .map(v => String(v).replace(/[\t\n]+/g, " ")).join("\t");
+  const vals = sheetRow(j, s === "applied" ? "Applied" : s === "saved" ? "Saved" : "Applied").map(String);
+  // Plain text: TSV with the multi-line LeetCode cell quoted. HTML: a one-row
+  // table with <br>s — Google Sheets prefers it, and keeps bullets in one cell.
+  const tsv = vals.map(v => /[\t\n"]/.test(v) ? '"' + v.replace(/\t/g, " ").replace(/"/g, '""') + '"' : v).join("\t");
+  const html = "<table><tr>" + vals.map(v => "<td>" + esc(v).replace(/\n/g, "<br>") + "</td>").join("") + "</tr></table>";
   const done = () => toast("📋 Copied — click a blank row's first cell in your sheet and paste");
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(tsv).then(done, () => fallbackCopy(tsv, done));
+  if (navigator.clipboard && window.isSecureContext && window.ClipboardItem) {
+    navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob([html], { type: "text/html" }),
+      "text/plain": new Blob([tsv], { type: "text/plain" }),
+    })]).then(done, () => fallbackCopy(tsv, done));
   } else fallbackCopy(tsv, done);
 }
 function fallbackCopy(text, done) {
@@ -1064,6 +1204,11 @@ const BADGES = [
   ["clear",   "🎯", "Quest Clear",     "Finish all daily quests once",        s => s.clears >= 1],
   ["early",   "🌅", "Early Bird",      "Apply before 9 AM",                   s => game.times.some(h => h < 9)],
   ["owl",     "🦉", "Night Owl",       "Apply after 11 PM",                   s => game.times.some(h => h >= 23)],
+  ["connect", "🤝", "Connector",       "Reach out to 5 people for referrals", s => s.outreach >= 5],
+  ["persist", "📬", "Persistent",      "Follow up on 5 applications",         s => s.followed >= 5],
+  ["spaced",  "🔁", "Spaced Out",      "Finish 10 LeetCode reviews",          s => s.reviews >= 10],
+  ["boss",    "🎤", "Boss Battle",     "Land an interview (from your sheet)", s => s.interviews >= 1],
+  ["offer",   "👑", "Offer!",          "Get an offer (from your sheet)",      s => s.offers >= 1],
 ];
 
 function localDay(d) {
@@ -1078,7 +1223,8 @@ function gameStats() {
   const appliedJobs = appliedIds.map(id => JOB_BY_ID[id]).filter(Boolean);
   const solvedDays = Object.values(game.solved);
   // activity streak: consecutive days (ending today or yesterday) with an application or a solve
-  const active = new Set([...entries.filter(([, v]) => v.s === "applied").map(([, v]) => v.t), ...solvedDays]);
+  const active = new Set([...entries.filter(([, v]) => v.s === "applied").map(([, v]) => v.t), ...solvedDays,
+    ...Object.keys(game.outDays || {}), ...Object.keys(game.fuDays || {}), ...Object.keys(game.revDays || {})]);
   let streak = 0; const d = new Date();
   if (!active.has(localDay(d))) d.setDate(d.getDate() - 1);
   while (active.has(localDay(d))) { streak++; d.setDate(d.getDate() - 1); }
@@ -1093,15 +1239,26 @@ function gameStats() {
     onsite: appliedJobs.filter(j => j.mode === "onsite").length,
     cats: new Set(appliedJobs.map(j => j.cat)).size,
     clears: Object.keys(game.clears).length,
+    outreach: Object.keys(game.outreach || {}).length,
+    followed: Object.values(game.followed || {}).filter(f => f.how === "done").length,
+    reviews: game.reviews || 0,
     streak, today,
   };
+  const sh = (game.sheet && game.sheet.rows && game.sheet.rows.length) ? sheetStats() : { c: { interview: 0, offer: 0 } };
+  s.interviews = sh.c.interview + sh.c.offer;
+  s.offers = sh.c.offer;
+  s.lcToday = s.solvedToday + ((game.revDays || {})[today] || 0);
+  s.netToday = ((game.outDays || {})[today] || 0) + ((game.fuDays || {})[today] || 0);
   s.quests = [
     ["Apply to 3 jobs", s.appliedToday, 3],
-    ["Solve 2 LeetCode problems", s.solvedToday, 2],
+    ["Solve or review 2 LeetCode problems", s.lcToday, 2],
+    ["Reach out or follow up once", s.netToday, 1],
     ["Triage 10 jobs in Quick Play", s.triagedToday, 10],
   ];
   s.xp = s.applied * 50 + s.saved * 10 + s.solved * 20 + game.triaged * 2 +
-         s.clears * 50 + Object.keys(game.unlocked).length * 25;
+         s.clears * 50 + Object.keys(game.unlocked).length * 25 +
+         s.outreach * 30 + s.followed * 15 + s.reviews * 10 +
+         s.interviews * 200 + s.offers * 1000;
   return s;
 }
 
@@ -1146,7 +1303,11 @@ function renderHUD(s) {
   const wrap = document.getElementById("hudBarWrap");
   wrap.setAttribute("aria-valuenow", pct); wrap.setAttribute("aria-valuemin", 0); wrap.setAttribute("aria-valuemax", 100);
   document.getElementById("hudNext").textContent =
-    `${(hi - s.xp).toLocaleString()} XP to Lv ${lvl + 1} · ✓ applied +50 · 🧠 solved +20 · ★ saved +10 · 🎮 triaged +2`;
+    `${(hi - s.xp).toLocaleString()} XP to Lv ${lvl + 1} · 🎤 interview +200 · ✓ applied +50 · 🤝 outreach +30 · 🧠 solved +20 · 📬 follow-up +15`;
+  const nFu = typeof followUps === "function" ? followUps().length : 0;
+  const nRev = typeof dueReviews === "function" ? dueReviews().length : 0;
+  document.getElementById("fuN").innerHTML = nFu ? `<span class="dot-n">${nFu}</span>` : "";
+  document.getElementById("revN").innerHTML = nRev ? `<span class="dot-n">${nRev}</span>` : "";
   document.getElementById("hudStreak").textContent = s.streak ? `🔥 ${s.streak}-day streak` : "Start a streak today";
   document.getElementById("hudQuests").innerHTML = s.quests.map(([q, n, goal]) =>
     `<li class="${n >= goal ? "done" : ""}"><span class="ck">${n >= goal ? "✓" : ""}</span><span class="q">${q}</span><span class="n">${Math.min(n, goal)}/${goal}</span></li>`).join("");
@@ -1203,8 +1364,12 @@ function statusXP(prev, s) { const v = { applied: 50, saved: 10 }; return (v[s] 
 
 /* ── LeetCode solved toggles (global per problem) ──────────── */
 function toggleSolved(n, el) {
-  if (game.solved[n]) { delete game.solved[n]; floatXP(-20); }
-  else { game.solved[n] = localDay(); floatXP(20); if (!REDUCED) confetti(24); }
+  if (game.solved[n]) { delete game.solved[n]; delete game.rev[n]; floatXP(-20); }
+  else {
+    game.solved[n] = localDay();
+    game.rev[n] = { s: 0, due: addDays(localDay(), REVIEW_GAPS[0]) };   // first spaced review
+    floatXP(20); if (!REDUCED) confetti(24);
+  }
   saveGame();
   render();
 }
@@ -1300,9 +1465,279 @@ document.addEventListener("keydown", e => {
   e.preventDefault();
 });
 
+/* ═══ 🤝 REFERRALS · 📬 FOLLOW-UPS · 🔁 REVIEWS · 📈 RESULTS ══════════ */
+const DAY = 86400000;
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return localDay(d); };
+const daysSince = iso => Math.floor((new Date(localDay() + "T12:00:00") - new Date(iso + "T12:00:00")) / DAY);
+const liSearch = kw => "https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(kw);
+["outreach", "followed", "rev", "revDays", "outDays", "fuDays"].forEach(k => { if (!game[k]) game[k] = {}; });
+if (!game.reviews) game.reviews = 0;
+if (!game.sheet) game.sheet = { rows: [], at: 0 };
+
+/* ── 🤝 referral / outreach panel on each card ─────────────── */
+const openRef = {};
+function toggleRef(id) { openRef[id] = !openRef[id]; render(); }
+function outreachMsg(j) {
+  return `Hi [Name], I'm Chan, a UW–Madison CS + Data Science grad. I'm applying for the ${j.title} role at ${j.company} ` +
+         `and would love to hear what the team is like. Would you be open to a quick chat, or referring me? Thanks so much!`;
+}
+function refPanel(j) {
+  const msg = outreachMsg(j), sent = game.outreach[j.id];
+  return `<div class="ref">
+    <b>🤝 Get a referral</b> — a note to someone on the team gets far more replies than a cold application.
+    <div class="links">
+      <a class="mini" href="${esc(liSearch(j.company + " University of Wisconsin"))}" target="_blank" rel="noopener">🎓 UW–Madison alumni</a>
+      <a class="mini" href="${esc(liSearch(j.company + " recruiter"))}" target="_blank" rel="noopener">🧑‍💼 Recruiters</a>
+      <a class="mini" href="${esc(liSearch(j.company + " software engineer"))}" target="_blank" rel="noopener">👩‍💻 Engineers</a>
+    </div>
+    <textarea id="msg-${j.id}" oninput="msgCount('${j.id}')">${esc(msg)}</textarea>
+    <div class="row2">
+      <span class="cc ${msg.length > 300 ? "over" : ""}" id="cc-${j.id}">${msg.length}/300 · LinkedIn connection notes max out at 300</span>
+      <span>
+        <button class="mini" onclick="copyText(document.getElementById('msg-${j.id}').value, '📋 Message copied — paste it into LinkedIn')">📋 Copy message</button>
+        <button class="mini ${sent ? "ok" : "primary"}" onclick="toggleOutreach('${j.id}')">${sent ? "✓ Reached out " + sent.slice(5) : "✉ I reached out (+30 XP)"}</button>
+      </span>
+    </div>
+  </div>`;
+}
+function msgCount(id) {
+  const n = document.getElementById("msg-" + id).value.length, el = document.getElementById("cc-" + id);
+  el.textContent = `${n}/300 · LinkedIn connection notes max out at 300`; el.classList.toggle("over", n > 300);
+}
+function bump(map, key) { map[key] = (map[key] || 0) + 1; }
+function toggleOutreach(id) {
+  if (game.outreach[id]) { delete game.outreach[id]; floatXP(-30); }
+  else { game.outreach[id] = localDay(); bump(game.outDays, localDay()); floatXP(30); confetti(30); }
+  saveGame(); render();
+}
+function copyText(text, msg) {
+  const done = () => toast(msg || "📋 Copied");
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+  else fallbackCopy(text, done);
+}
+
+/* ── 🔁 spaced review of solved LeetCode (3 → 7 → 14 days) ──── */
+const REVIEW_GAPS = [3, 7, 14];
+const PROBLEM_INFO = {};
+PREPS.forEach(p => p.problems.forEach(([n, name, url]) => { PROBLEM_INFO[n] = { name, url }; }));
+Object.entries(game.solved).forEach(([n, d]) => { if (!game.rev[n]) game.rev[n] = { s: 0, due: addDays(d, REVIEW_GAPS[0]) }; });
+function dueReviews() {
+  const t = localDay();
+  return Object.entries(game.rev).filter(([n, r]) => game.solved[n] && r.due && r.due <= t)
+    .map(([n, r]) => ({ n: +n, stage: r.s, due: r.due, ...(PROBLEM_INFO[n] || { name: "Problem", url: "https://leetcode.com/problemset/" }) }));
+}
+function markReviewed(n) {
+  const r = game.rev[n] || { s: 0 };
+  r.s += 1;
+  r.due = r.s < REVIEW_GAPS.length ? addDays(localDay(), REVIEW_GAPS[r.s]) : null;   // null = mastered
+  game.rev[n] = r; game.reviews += 1; bump(game.revDays, localDay());
+  floatXP(10); saveGame(); openSide("reviews");
+}
+
+/* ── 📬 follow-ups: applications 7+ days old, no reply yet ─── */
+const FOLLOW_UP_DAYS = 7;
+function followUps() {
+  const out = [], urls = new Set();
+  Object.entries(statusMap).forEach(([id, v]) => {
+    if (v.s !== "applied" || game.followed[id] || daysSince(v.t) < FOLLOW_UP_DAYS) return;
+    const j = JOB_BY_ID[id];
+    if (!j) return;
+    urls.add(j.url);
+    const sr = sheetRowFor(j.url);
+    if (sr && outcomeOf(sr, 0) !== "pending") return;     // sheet already says rejected / interviewing
+    out.push({ key: id, company: j.company, title: j.title, url: j.url, date: v.t, days: daysSince(v.t) });
+  });
+  (game.sheet.rows || []).forEach(r => {
+    const iso = parseSheetDate(r.date);
+    if (!iso || !r.url || urls.has(r.url) || !/^https?:/i.test(r.url)) return;
+    const key = "u:" + r.url;
+    if (game.followed[key] || outcomeOf(r, 0) !== "pending") return;
+    const d = daysSince(iso);
+    if (d < FOLLOW_UP_DAYS || d > 45) return;
+    out.push({ key, company: r.company, title: r.title, url: r.url, date: iso, days: d });
+  });
+  return out.sort((a, b) => b.days - a.days);
+}
+function followMsg(f) {
+  return `Hi [Name], I applied for the ${f.title} role at ${f.company} on ${f.date} and wanted to reiterate my interest. ` +
+         `My background in React/TypeScript, Python and SQL lines up well with the role, and I'd be glad to share more. ` +
+         `Is there anything else I can provide? Thanks, Chan`;
+}
+function markFollowed(key, how) {
+  game.followed[key] = { d: localDay(), how };
+  if (how === "done") { bump(game.fuDays, localDay()); floatXP(15); }
+  saveGame(); openSide("followups");
+}
+
+/* ── 📈 results from the Google Sheet (Status column) ──────── */
+const POS_RE = /interview|behavio|phone|screen|onsite|on-site|technical|\boa\b|assessment|final|offer|hired|round|recruiter call/i;
+function outcomeOf(r, staleDays) {
+  const s = (r.status || "").toLowerCase();
+  if (/offer|hired/.test(s)) return "offer";
+  if (POS_RE.test(s)) return "interview";
+  if (/reject|declin|not selected|no longer/.test(s)) return "rejected";
+  if (/ghost/.test(s)) return "noreply";
+  if (/applied|submitted|pending|in review|under review/.test(s) || !s) {
+    const iso = parseSheetDate(r.date);
+    if (staleDays && iso && daysSince(iso) > staleDays) return "noreply";
+    return "pending";
+  }
+  return "other";     // e.g. "Side Gig" — not an application outcome
+}
+function parseSheetDate(v) {
+  if (!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return "";
+  let y = +m[3]; if (y < 100) y += 2000;
+  return `${y}-${String(m[1]).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}`;
+}
+let SHEET_BY_URL = {};
+function indexSheet() {
+  SHEET_BY_URL = {};
+  (game.sheet.rows || []).forEach(r => { if (r.url) SHEET_BY_URL[r.url.trim()] = r; });
+}
+const sheetRowFor = url => SHEET_BY_URL[(url || "").trim()];
+indexSheet();
+async function loadSheetRows(force) {
+  if (!sheetUrl) return;
+  if (!force && Date.now() - (game.sheet.at || 0) < 20 * 60000) return;
+  try {
+    const res = await fetch(sheetUrl + "?rows=1");
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.rows)) throw new Error(data.error || "no rows");
+    game.sheet = { rows: data.rows, at: Date.now() };
+    saveGame(); indexSheet(); render();
+    if (force) toast(`📗 Loaded ${data.rows.length} rows from your sheet`);
+    if (!document.getElementById("sidePanel").hidden) openSide(sideView);
+  } catch (e) {
+    if (force) toast("Couldn't read the sheet — redeploy the new Code.gs (see sheet-sync/README)", true);
+  }
+}
+function channelOf(app) {
+  const a = (app || "").toLowerCase();
+  if (!a) return "Not recorded";
+  if (a.includes("simplify")) return "Simplify";
+  if (a.includes("handshake")) return "Handshake";
+  if (a.includes("linkedin")) return "LinkedIn";
+  if (a.includes("indeed")) return "Indeed";
+  if (a.includes("ziprecruit")) return "ZipRecruiter";
+  if (a.includes("dice")) return "Dice";
+  if (/greenhouse|lever\.co|ashbyhq|myworkdayjobs|icims|smartrecruiters|oraclecloud|workable|jobvite/.test(a)) return "Company site (ATS)";
+  if (a.includes("company")) return "Company website";
+  if (/^https?:/.test(a)) return "Other link";
+  return "Other";
+}
+function placeOf(loc) {
+  const l = (loc || "").toLowerCase();
+  if (!l) return "Not recorded";
+  if (/\bmn\b|minnesota|minneapolis|st\.? ?paul|shakopee|burnsville|eden prairie|chanh|plym|mounds view|minnetonka|twin cities|hopkins|eagan|bloomington/.test(l)) return "Minnesota";
+  if (/remote|anywhere|worldwide/.test(l)) return "Remote";
+  return "Elsewhere in US";
+}
+function roleOf(t) {
+  const s = (t || "").toLowerCase();
+  if (/data|analyst|analytics|bi\b/.test(s)) return "Data / analyst";
+  if (/front|web|ui\b|react|design/.test(s)) return "Frontend / web";
+  if (/\bqa\b|quality|test/.test(s)) return "QA / test";
+  if (/ai\b|machine learning|ml\b/.test(s)) return "AI / ML";
+  if (/engineer|developer|programmer|software|swe|sde/.test(s)) return "SWE / general";
+  return "Other";
+}
+function sheetStats() {
+  const rows = (game.sheet.rows || []).map(r => ({ ...r, o: outcomeOf(r, 30) })).filter(r => r.o !== "other");
+  const c = { interview: 0, offer: 0, rejected: 0, noreply: 0, pending: 0 };
+  rows.forEach(r => c[r.o]++);
+  return { rows, c, positive: c.interview + c.offer };
+}
+function breakdown(rows, fn) {
+  const g = {};
+  rows.forEach(r => { const k = fn(r); (g[k] = g[k] || { n: 0, pos: 0, decided: 0 }); g[k].n++;
+    if (r.o === "interview" || r.o === "offer") g[k].pos++;
+    if (r.o !== "pending") g[k].decided++; });
+  return Object.entries(g).sort((a, b) => b[1].n - a[1].n);
+}
+function resultsHTML() {
+  if (!sheetUrl) return `<div class="lead">Connect your sheet in <b>⚙ Sheet sync</b> first — results are computed from its Status column.</div>`;
+  const { rows, c, positive } = sheetStats();
+  if (!rows.length) return `<div class="lead">No rows loaded yet. Click <b>↻ Refresh</b>. If it keeps failing, redeploy the new <code>Code.gs</code> (it adds read access).</div>`;
+  const decided = rows.length - c.pending;
+  const rate = decided ? Math.round(positive / decided * 100) : 0;
+  const segs = [["Interview / offer", positive, "var(--good-mark)"], ["Rejected", c.rejected, "var(--crit)"],
+                ["No reply (incl. 30+ days)", c.noreply, "var(--baseline)"], ["Waiting (< 30 days)", c.pending, "var(--series-1)"]];
+  const stack = segs.filter(s => s[1]).map(([l, n, col]) => `<span title="${l}: ${n}" style="flex:${n};background:${col}"></span>`).join("");
+  const legend = segs.map(([l, n, col]) => `<span><i style="background:${col}"></i>${l} <b class="num">${n}</b></span>`).join("");
+  const table = (title, list) => `<div><h3>${title}</h3>${list.map(([k, v]) => {
+    const r = v.decided ? v.pos / v.decided : 0;
+    return `<div class="rrow"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${Math.max(r ? 4 : 0, Math.round(r * 100))}%"></div></div>
+      <span class="num">${v.decided ? `${v.pos}/${v.decided} got interviews` : `${v.n} waiting`}${v.n < 5 ? ' <span class="small">· small sample</span>' : ""}</span></div>`;
+  }).join("")}</div>`;
+  const byChannel = breakdown(rows, r => channelOf(r.url));
+  const best = byChannel.filter(([, v]) => v.decided >= 5).sort((a, b) => b[1].pos / b[1].decided - a[1].pos / a[1].decided)[0];
+  const insight = best && best[1].pos
+    ? `Best channel so far: <b>${esc(best[0])}</b> — ${best[1].pos} of ${best[1].decided} decided applications got an interview. Lean into it.`
+    : `No channel with 5+ decided applications has produced an interview yet — the fix is usually <b>who sees your application</b>, not how many you send. Use 🤝 referrals and 📬 follow-ups on your next applications.`;
+  return `
+    <div class="res-kpis">
+      <div><div class="l">Applications</div><div class="v">${rows.length}</div></div>
+      <div><div class="l">Interview rate</div><div class="v">${rate}%</div></div>
+      <div><div class="l">Interviews</div><div class="v">${positive}</div></div>
+      <div><div class="l">Rejected</div><div class="v">${c.rejected}</div></div>
+      <div><div class="l">No reply</div><div class="v">${c.noreply}</div></div>
+    </div>
+    <div class="stack" role="img" aria-label="Outcomes">${stack}</div>
+    <div class="legend">${legend}</div>
+    <div class="res-grid">
+      ${table("By channel", byChannel)}
+      ${table("By location", breakdown(rows, r => placeOf(r.location)))}
+      ${table("By role type", breakdown(rows, r => roleOf(r.title)))}
+      ${table("By month applied", breakdown(rows, r => (parseSheetDate(r.date) || "Undated").slice(0, 7)).sort((a, b) => a[0].localeCompare(b[0])))}
+    </div>
+    <div class="insight">💡 ${insight}</div>`;
+}
+
+/* ── side panel router ─────────────────────────────────────── */
+let sideView = "";
+function openSide(view) {
+  sideView = view;
+  const p = document.getElementById("sidePanel");
+  p.hidden = false;
+  if (view === "followups") {
+    const list = followUps();
+    p.innerHTML = `<h2>📬 Follow-ups due <button class="mini" onclick="closeSide()">Close</button></h2>
+      <div class="lead">Applications ${FOLLOW_UP_DAYS}+ days old with no reply. A short, polite nudge to the recruiter (or the person you messaged) revives a surprising number. ✓ Followed up: +15 XP.</div>
+      <div class="fu-list">${list.length ? list.map(f => `
+        <div class="fu"><div><b>${esc(f.company)}</b> · ${esc(f.title)}<div class="sub2">Applied ${f.date} · ${f.days} days ago</div></div>
+          <div class="btns">
+            <a class="mini" href="${esc(liSearch(f.company + " recruiter"))}" target="_blank" rel="noopener">🧑‍💼 Find recruiter</a>
+            <button class="mini" onclick="copyText(${esc(JSON.stringify(followMsg(f)))}, '📋 Follow-up message copied')">📋 Message</button>
+            <button class="mini ok" onclick="markFollowed(${esc(JSON.stringify(f.key))}, 'done')">✓ Followed up</button>
+            <button class="mini" onclick="markFollowed(${esc(JSON.stringify(f.key))}, 'skip')">Dismiss</button>
+          </div></div>`).join("") : '<div class="lead">🎉 Nothing due — you\'re on top of it.</div>'}</div>`;
+  } else if (view === "reviews") {
+    const list = dueReviews();
+    p.innerHTML = `<h2>🔁 LeetCode reviews due <button class="mini" onclick="closeSide()">Close</button></h2>
+      <div class="lead">Solved problems come back after 3, 7 and 14 days so they stick for interviews. Re-solve from scratch (no peeking), then mark it: +10 XP.</div>
+      <div class="fu-list">${list.length ? list.map(r => `
+        <div class="fu"><div><b>#${r.n} ${esc(r.name)}</b><div class="sub2">Review ${r.stage + 1} of ${REVIEW_GAPS.length} · due ${r.due}</div></div>
+          <div class="btns"><a class="mini primary" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>
+          <button class="mini ok" onclick="markReviewed(${r.n})">✓ Reviewed</button></div></div>`).join("")
+        : '<div class="lead">Nothing due. Solve problems from any job\'s 🧠 prep panel and they\'ll show up here on schedule.</div>'}</div>`;
+  } else if (view === "results") {
+    p.innerHTML = `<h2>📈 Your results <span><button class="mini" onclick="loadSheetRows(true)">↻ Refresh</button> <button class="mini" onclick="closeSide()">Close</button></span></h2>
+      <div class="lead">From your tracker sheet's Status column. "Applied" rows older than 30 days count as no reply.</div>${resultsHTML()}`;
+  }
+  renderHUD();
+}
+function closeSide() { document.getElementById("sidePanel").hidden = true; sideView = ""; }
+document.getElementById("fuBtn").onclick = () => sideView === "followups" ? closeSide() : openSide("followups");
+document.getElementById("revBtn").onclick = () => sideView === "reviews" ? closeSide() : openSide("reviews");
+document.getElementById("resultsBtn").onclick = () => { if (sideView === "results") return closeSide(); openSide("results"); loadSheetRows(false); };
+
 refreshSyncUI();
 renderChart();
 render();
+loadSheetRows(false);
 </script>
 </body>
 </html>

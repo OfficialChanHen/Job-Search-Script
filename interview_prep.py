@@ -225,8 +225,8 @@ def prep_for(title: str, company: str = "") -> dict:
 
 
 def prep_text(prep: dict) -> str:
-    """Compact one-cell summary for the Google Sheet."""
+    """One Google Sheet cell: the interview focus, then one bullet per problem."""
     if not prep["problems"]:
         return prep["focus"]
-    probs = ", ".join(f"#{n} {name}" for n, name, _ in prep["problems"])
-    return f"{prep['focus']} — Practice: {probs}"
+    bullets = "\n".join(f"• #{n} {name}" for n, name, _ in prep["problems"])
+    return f"{prep['focus']}\n{bullets}"
