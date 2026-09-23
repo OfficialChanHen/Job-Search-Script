@@ -3,10 +3,21 @@
 When you click **✓ Applied** on the dashboard, a row is added to your tracker
 sheet automatically. This connects the two. You only do it once.
 
-Your sheet's columns (already matched by the script):
+Columns written (matched **by header name**, so order doesn't matter):
 
-| Last Update | Company | Job | Location | Status | Application |
-|---|---|---|---|---|---|
+| Last Update | Company | Job | Location | Status | Application | Job Type | LeetCode Prep |
+|---|---|---|---|---|---|---|---|
+
+**Job Type** (Full-time / Contract / Part-time / Temporary) and **LeetCode Prep**
+(interview focus + specific problems for that role/company) are added to the end
+of your header row automatically the first time a job is synced. Drag them
+wherever you like afterwards.
+
+**Not connected, or want to add a job without marking it Applied?** Click
+**📋 Copy row** on any job, click the first empty cell in column A of your
+sheet, and paste — the values land in the columns above, in order.
+**⬇ Export tracked** downloads every Applied/Saved job as a CSV in the same
+column order (File → Import → Append to current sheet).
 
 ---
 
@@ -42,18 +53,23 @@ Your sheet's columns (already matched by the script):
 
 ---
 
+## Already set this up before?
+
+Paste the new `Code.gs` over the old one, then
+**Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
+The `/exec` URL stays the same. Opening the URL in a browser should now show
+`"version":2`.
+
 ## Notes
 
 - **Keep the `/exec` URL private.** Anyone with it can add rows to your sheet
   (nothing worse — the script only appends job rows). Treat it like a password;
   don't commit it or share it.
 - **Re-applying is safe.** If you mark the same job Applied again, the script
-  updates its existing row (Last Update + Status) instead of adding a duplicate.
+  updates its existing row (Last Update + Status, and fills Job Type / LeetCode
+  Prep if blank) instead of adding a duplicate.
 - **Change the Status later** (Interview / Rejected / Ghost) directly in the
   sheet — the dashboard never overwrites a row it didn't create, and only
   touches a row again if you re-click Applied on that exact job.
-- **Editing the script later?** After any change to `Code.gs`, do
-  **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
-  The `/exec` URL stays the same, so you don't need to re-paste it.
 - **Not the first tab?** If your tracker isn't the leftmost sheet tab, set
   `SHEET_NAME = "YourTabName"` at the top of `Code.gs` and redeploy.

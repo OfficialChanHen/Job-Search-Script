@@ -1,23 +1,33 @@
 # 🎯 Job Hunter — Chan Hen
 
-Automated daily job scraper for junior software engineer roles.  
-Runs every morning at **8:00 AM CST** via GitHub Actions.  
+Automated daily job scraper for **entry-level SWE and tech-adjacent roles in the US**.
+Runs every morning at **8:00 AM CST** via GitHub Actions.
 Results are committed back to this repo as `data/jobs_YYYY-MM-DD.csv`, and an
-interactive **dashboard** is rebuilt at `docs/index.html` (serve it with GitHub Pages).
+interactive **dashboard** is rebuilt at `docs/index.html` (served with GitHub Pages).
 
-**Priority: in-person US roles first, then hybrid, then remote.**
+**Focus:** full-time first · US only · little to no experience · no internships ·
+in-person > hybrid > remote.
 
 ---
 
 ## 📊 The Dashboard
 
 Every run rebuilds `docs/index.html` — a single self-contained page with **all
-jobs ever collected**, scored against your resume skills:
+jobs ever collected** (history is re-filtered with today's rules), scored against
+your resume skills, entry-level signals, full-time, in-person and Minnesota.
 
-- Tabs: **New today / Minnesota / In-person / Hybrid / Remote / Junior / Internships**
-- Search, source filter, best-match sorting, one-click **Apply ↗** links
-- Track progress per job: **★ Save / ✓ Applied / 🚫 Hide** (stored in your browser)
-- **Export tracked (CSV)** button downloads your Applied + Saved list
+- Tabs: **New today / All / Minnesota / In-person / Hybrid / Remote / Entry-level / SWE / Tech-adjacent / Saved / Applied / Hidden**
+- Filters: **job type** (defaults to Full-time), **role** (SWE, Frontend, Data/BI, Solutions/FDE, QA, Cloud, IT…), source, sort
+- Every card shows **Full-time / Contract / Part-time**, work mode, role category, stated experience,
+  and a **⚠ check grad window** flag on class-of-2026/2027 new-grad postings
+- **🧠 LeetCode prep** on each job: what the interview usually tests for that role
+  (and company, where there's a well-known pattern) plus 4–6 specific LeetCode problems with links
+- Track per job: **✓ Applied / ★ Save / Hide** (stored in your browser)
+- **Google Sheets:** ✓ Applied auto-adds a row to your tracker (see [sheet-sync/README.md](sheet-sync/README.md));
+  **📋 Copy row** copies any job in your sheet's column order for pasting;
+  **⬇ Export tracked** downloads Applied + Saved in the same order
+
+Sheet columns: `Last Update | Company | Job | Location | Status | Application | Job Type | LeetCode Prep`
 
 **One-time setup:** repo → Settings → Pages → Source: *Deploy from a branch* →
 Branch `main`, folder `/docs`. Your dashboard then lives at
@@ -27,55 +37,79 @@ To rebuild locally: `python build_dashboard.py` then open `docs/index.html`.
 
 ---
 
+## 🧭 Roles it targets
+
+SWE roles are the core, but entry-level SWE postings are shrinking (Indeed Hiring
+Lab, Jul 2026: entry-level postings −7.5% YoY while senior +14.7%; ~69% of software
+postings are senior). These adjacent roles are where new-grad hiring is holding
+up or growing, and they fit a CS + Data Science background:
+
+| Category | Example titles | Coding interview? |
+|---|---|---|
+| **SWE / Frontend / Mobile** | Software Engineer I, Associate SWE, Frontend (React), React Native | Yes — LeetCode easy–medium |
+| **Solutions / FDE** | Forward Deployed Engineer, Deployment Strategist, Solutions / Implementation / Support Engineer | Practical coding + customer case |
+| **Data / BI** | Data Analyst, BI Analyst, Analytics Engineer | SQL screen (LeetCode SQL 50) |
+| **AI / ML** | AI Engineer, Applied AI, ML Engineer I | Yes — mediums + ML basics |
+| **QA / Cloud / DevOps** | QA Engineer, SDET, Cloud Support Associate | Lighter LeetCode + scripting |
+| **Salesforce / ERP** | Salesforce Developer, ServiceNow Developer, Epic analyst | Light |
+| **IT / Tech analyst** | IT Analyst, Business Systems Analyst, Technology Associate | Usually none |
+| **Early-career programs** | U.S. Bank Engineering Rotation, Target Technology programs, apprenticeships | Varies |
+
+AI-trainer coding contracts (DataAnnotation, Outlier, Mercor) are matched too, but
+they're 1099 contract work — useful side income, ranked below full-time roles.
+
+**Filtered out:** internships / co-ops / student roles, senior/staff/lead/manager,
+level II+ titles, clearance-required (TS/SCI) roles, hardware-only engineering, and
+any posting that asks for **more than 2 years** (junior titles) or **more than 1 year**
+(plain titles like "Software Engineer") when the description states it.
+
+---
+
 ## 📦 What it scrapes
 
 | Source | Type | Key Required? |
 |---|---|---|
-| **Greenhouse boards** | Company career pages (Stripe, Databricks, Axon, SpaceX, +25 more) | ❌ Free |
-| **Ashby boards** | Company career pages (OpenAI, Ramp, Notion, Cursor, …) | ❌ Free |
-| **Lever boards** | Company career pages (Palantir, Zoox, …) | ❌ Free |
-| **GitHub/NewGrad** | SimplifyJobs new-grad table | ❌ Free |
-| **GitHub/Internship** | SimplifyJobs internships | ❌ Free |
-| **RemoteOK** | Remote tech jobs | ❌ Free |
-| **Remotive** | Remote dev jobs | ❌ Free |
-| **Arbeitnow** | Remote / relocation jobs | ❌ Free |
-| **Himalayas** | Startup remote jobs | ❌ Free |
-| **WeWorkRemotely** | Remote dev RSS | ❌ Free |
-| **Jobicy** | Remote jobs API | ❌ Free |
+| **LinkedIn** | Public job search — entry-level, full-time, last 24h | ❌ Free |
+| **Dice** | Tech recruiting board — full-time, posted today | ❌ Free |
+| **Himalayas** | US + entry-level search API | ❌ Free |
+| **Hacker News** | Monthly "Who is hiring?" posts mentioning junior/new grad | ❌ Free |
+| **SimplifyJobs** | New-Grad-Positions JSON feed (last 3 weeks) | ❌ Free |
+| **speedyapply / zapplyjobs** | 2027 new-grad lists (USA) | ❌ Free |
+| **Greenhouse** | ~60 company boards (Stripe, SpaceX, Datadog, Jamf, Jane Street, …) | ❌ Free |
+| **Ashby** | ~26 boards (OpenAI, Ramp, Plaid, Snowflake, Cursor, …) | ❌ Free |
+| **Lever** | Palantir, Zoox | ❌ Free |
+| **SmartRecruiters** | ServiceNow, AbbVie | ❌ Free |
+| **Workday** | Twin Cities employers (Target, U.S. Bank, Medtronic, 3M, General Mills, Thomson Reuters, C.H. Robinson, Securian, Ameriprise, Xcel, …) + Capital One, Nvidia, Salesforce, Visa, … | ❌ Free |
+| **RemoteOK / Remotive / WeWorkRemotely / Jobicy** | Remote boards — only US-restricted listings kept | ❌ Free |
+| **USAJobs** | Federal IT/CS/data jobs, GS-5–9, incl. Pathways Recent Graduates | ✅ Free signup |
+| **JSearch** | Google for Jobs → Indeed, Glassdoor, ZipRecruiter, … | ✅ Free RapidAPI tier |
 | **Adzuna** | Large job aggregator | ✅ Free signup |
-| **Eventbrite** | Tech networking events | ✅ Free signup |
 
-All results are filtered to **US-based or US-open remote** locations and scored
-against your resume skills (React, TypeScript, Next.js, Python, React Native, etc.).
-Company-board results are additionally filtered to junior-friendly titles.
+Not scraped (need a login — check them by hand): **Handshake** (the most important
+one for new grads), Wellfound, YC Work at a Startup, Built In Minnesota.
+Indeed is covered indirectly through JSearch once its key is added.
 
 ---
 
-## 🚀 Setup (5 minutes)
+## 🚀 Setup
 
-### 1. Fork or clone this repo
-```bash
-git clone https://github.com/YOUR_USERNAME/job-hunter.git
-cd job-hunter
-```
+### 1. Optional free API keys (unlock 3 more sources)
 
-### 2. Add optional free API keys (unlocks 2 more sources)
-
-Go to your repo → **Settings → Secrets and variables → Actions → New repository secret**
+Repo → **Settings → Secrets and variables → Actions → New repository secret**
 
 | Secret Name | Where to get it |
 |---|---|
-| `ADZUNA_APP_ID` | [developer.adzuna.com](https://developer.adzuna.com/) → free account |
-| `ADZUNA_APP_KEY` | Same page as above |
-| `EVENTBRITE_KEY` | [eventbrite.com/platform/api](https://www.eventbrite.com/platform/api) → free account |
+| `USAJOBS_KEY` | [developer.usajobs.gov/apirequest](https://developer.usajobs.gov/apirequest/) |
+| `USAJOBS_EMAIL` | The email you registered the USAJobs key with |
+| `JSEARCH_KEY` | [rapidapi.com → JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) → subscribe to the free plan → copy `X-RapidAPI-Key` (free tier ≈ 200 req/month; the scraper uses 5/day) |
+| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | [developer.adzuna.com](https://developer.adzuna.com/) |
 
-> Both take under 2 minutes to sign up for. Adzuna gives 250 free requests/month. Eventbrite is unlimited.
+You're eligible for **Pathways Recent Graduates** for 2 years after your degree
+(until about mid-2027).
 
-### 3. Enable GitHub Actions
+### 2. Enable GitHub Actions
 
-Go to **Actions** tab → click **"I understand my workflows, go ahead and enable them"**
-
-That's it. The workflow runs automatically at 8 AM CST every day.
+**Actions** tab → enable workflows. The workflow runs automatically at 8 AM CST.
 
 ---
 
@@ -86,13 +120,9 @@ That's it. The workflow runs automatically at 8 AM CST every day.
 **Locally:**
 ```bash
 pip install -r requirements.txt
-
-# Optional: set API keys
-export ADZUNA_APP_ID=your_id
-export ADZUNA_APP_KEY=your_key
-export EVENTBRITE_KEY=your_key
-
-python job_hunter.py
+python job_hunter.py                 # all sources
+python job_hunter.py linkedin dice   # just some sources (substring of fetch_* names)
+python build_dashboard.py
 ```
 
 ---
@@ -102,12 +132,9 @@ python job_hunter.py
 ```
 data/
   seen_jobs.json          ← tracks all seen IDs (prevents duplicates across days)
-  jobs_2026-05-06.csv     ← today's new listings
-  jobs_2026-05-07.csv     ← tomorrow's new listings
-  ...
-
+  jobs_2026-09-23.csv     ← that day's new listings
 logs/
-  job_hunter_2026-05-06.log   ← full debug log for each run
+  job_hunter_2026-09-23.log   ← full debug log for each run (API keys are redacted)
 ```
 
 ### CSV columns
@@ -116,43 +143,31 @@ logs/
 |---|---|
 | `id` | Stable 12-char hash (MD5 of title+company+url) |
 | `date_found` | Date this listing was first seen |
-| `type` | `job` or `networking` |
+| `type` | `job` |
 | `source` | Which site it came from |
-| `title` | Job title or event name |
-| `company` | Company or group name |
-| `location` | Remote / city / state |
-| `url` | Direct link to apply or RSVP |
-| `posted` | Date the listing was posted |
-| `tags` | Tech stack tags |
-| `work_mode` | `onsite` / `hybrid` / `remote` (onsite sorts first) |
+| `title`, `company`, `location`, `url` | The listing |
+| `posted` | Date (or age, for new-grad lists) the listing was posted |
+| `tags` | Department / tech tags when the source has them |
+| `work_mode` | `onsite` / `hybrid` / `remote` |
+| `job_type` | `Full-time` / `Contract` / `Part-time` / `Temporary` (blank = source didn't say) |
+| `experience` | Stated requirement, e.g. `0 yrs`, `1+ yrs`, `Entry-level`, `New grad` |
+| `category` | Role bucket: `swe`, `frontend`, `data_analyst`, `solutions`, … |
 
 ---
 
 ## 🔧 Customization
 
-Open `job_hunter.py` and edit these at the top:
+| What | Where |
+|---|---|
+| Keyword searches (LinkedIn etc.) | `SEARCH_TERMS`, `TWIN_CITIES_TERMS` in `job_hunter.py` |
+| Company boards | `GREENHOUSE_BOARDS`, `ASHBY_BOARDS`, `LEVER_BOARDS`, `SMARTRECRUITERS_BOARDS`, `WORKDAY_BOARDS` in `job_hunter.py` |
+| Which titles count, seniority, internships, years-of-experience cutoffs, US check | `job_rules.py` (`ROLE_CATEGORIES`, `MAX_YEARS`, `STRICT_MAX_YEARS`) |
+| LeetCode problem lists per role / company | `interview_prep.py` |
+| Scoring weights | `classify_and_score()` in `build_dashboard.py` |
 
-```python
-# Add or remove skills to tune the relevance filter
-MY_SKILLS = {
-    "react", "typescript", "next.js", ...
-}
-
-# Change what gets searched
-SEARCH_TERMS = [
-    "junior software engineer",
-    "react native developer",
-    ...
-]
-
-# Add/remove companies whose career boards get scraped directly
-GREENHOUSE_BOARDS = ["stripe", "databricks", ...]
-LEVER_BOARDS      = ["palantir", ...]
-ASHBY_BOARDS      = ["openai", "ramp", ...]
-```
-
-> Find a company's board slug from its careers-page URL:
-> `boards.greenhouse.io/<slug>`, `jobs.lever.co/<slug>`, or `jobs.ashbyhq.com/<slug>`.
+> Find a board slug from a careers-page URL: `boards.greenhouse.io/<slug>`,
+> `jobs.lever.co/<slug>`, `jobs.ashbyhq.com/<slug>`, or for Workday
+> `<tenant>.wdN.myworkdayjobs.com/<site>`.
 
 Change the cron schedule in `.github/workflows/daily_jobs.yml`:
 ```yaml
@@ -163,7 +178,6 @@ Change the cron schedule in `.github/workflows/daily_jobs.yml`:
 
 ## 💡 Tips
 
-- **Bookmark the Actions tab** — you'll see a green ✓ or red ✗ each morning
-- **Download the CSV artifact** from the Actions run summary without pulling the repo
-- Open CSVs in Excel / Google Sheets and use filters to sort by `source` or `tags`
-- The `seen_jobs.json` file grows over time — it's what prevents the same job appearing twice. Don't delete it.
+- LinkedIn sometimes rate-limits GitHub's servers; when it does, the log says
+  "rate-limited (429)" and the other sources still run.
+- The `seen_jobs.json` file is what prevents the same job appearing twice. Don't delete it.

@@ -12,6 +12,7 @@ jobs:
   hunt:
     name: Fetch job listings
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: write   # needed to commit results back to the repo
@@ -42,8 +43,12 @@ jobs:
           # Sign up free at https://developer.adzuna.com/
           ADZUNA_APP_ID:  ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          # Sign up free at https://www.eventbrite.com/platform/api
-          EVENTBRITE_KEY: ${{ secrets.EVENTBRITE_KEY }}
+          # Federal jobs — free key at https://developer.usajobs.gov/apirequest/
+          USAJOBS_KEY:    ${{ secrets.USAJOBS_KEY }}
+          USAJOBS_EMAIL:  ${{ secrets.USAJOBS_EMAIL }}
+          # Indeed / Glassdoor / ZipRecruiter via Google for Jobs — free RapidAPI key
+          # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
+          JSEARCH_KEY:    ${{ secrets.JSEARCH_KEY }}
         run: python job_hunter.py
 
       # ── 5. Build the dashboard (docs/index.html → GitHub Pages) ────────────
