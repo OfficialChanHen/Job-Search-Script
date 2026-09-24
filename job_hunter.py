@@ -47,6 +47,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+from enrich import enrich_rows, is_too_experienced
 from job_rules import (
     MAX_YEARS, STRICT_MAX_YEARS, classify_work_mode, experience_label, html_to_text,
     infer_job_type, is_junior_title, is_target_title, is_us_location,
@@ -325,8 +326,10 @@ def entry(
     work_mode: str = "",
     job_type: str = "",
     experience: str = "",
+    desc: str = "",
 ) -> dict:
     return {
+        "_desc": desc,          # full posting (HTML or text) for enrich.py; never written to CSV
         "source": source,
         "type": kind,
         "title": title.strip(),
@@ -556,6 +559,7 @@ def fetch_himalayas() -> list[dict]:
                 tags       = ", ".join(item.get("categories", [])[:4]),
                 job_type   = jt,
                 experience = exp or "Entry-level",
+                desc       = item.get("description", ""),
             ))
         time.sleep(0.5)
 
@@ -630,6 +634,7 @@ def fetch_hn_hiring() -> list[dict]:
             work_mode  = mode,
             job_type   = infer_job_type("", role, text, default="Full-time"),
             experience = exp,
+            desc       = raw,
         ))
 
     log.info(f"  ✓ Hacker News → {len(jobs)} relevant jobs")
@@ -676,6 +681,7 @@ def fetch_remoteok() -> list[dict]:
             work_mode  = "remote",
             job_type   = infer_job_type("", title, html_to_text(item.get("description", ""))),
             experience = exp,
+            desc       = item.get("description", ""),
         ))
 
     log.info(f"  ✓ RemoteOK → {len(jobs)} relevant jobs")
@@ -727,6 +733,7 @@ def fetch_remotive() -> list[dict]:
                 work_mode  = "remote",
                 job_type   = jt,
                 experience = exp,
+                desc       = item.get("description", ""),
             ))
         time.sleep(0.4)
 
@@ -801,6 +808,7 @@ def fetch_weworkremotely() -> list[dict]:
                 work_mode  = "remote",
                 job_type   = infer_job_type(item.findtext("type") or "", title, desc),
                 experience = exp,
+                desc       = item.findtext("description") or "",
             ))
         time.sleep(0.5)
 
@@ -857,6 +865,7 @@ def fetch_jobicy() -> list[dict]:
                 work_mode  = "remote",
                 job_type   = jt,
                 experience = exp or ("Entry-level" if "entry" in level or "junior" in level else ""),
+                desc       = item.get("jobDescription", ""),
             ))
         time.sleep(0.4)
 
@@ -1071,6 +1080,7 @@ def fetch_greenhouse_boards() -> list[dict]:
                 tags       = ", ".join(d.get("name", "") for d in item.get("departments") or []),
                 job_type   = infer_job_type("", title, desc, default="Full-time"),
                 experience = exp,
+                desc       = item.get("content", ""),
             ))
             kept += 1
         log.debug(f"    {slug}: kept {kept}/{len(items)}")
@@ -1125,6 +1135,8 @@ def fetch_lever_boards() -> list[dict]:
                 work_mode  = classify_work_mode(location, item.get("workplaceType") or ""),
                 job_type   = jt,
                 experience = exp,
+                desc       = item.get("description", "") + "".join(
+                    f"<h3>{l.get('text', '')}</h3><ul>{l.get('content', '')}</ul>" for l in item.get("lists") or []),
             ))
         time.sleep(0.3)
 
@@ -1177,6 +1189,7 @@ def fetch_ashby_boards() -> list[dict]:
                 work_mode  = mode,
                 job_type   = jt,
                 experience = exp,
+                desc       = item.get("descriptionHtml", "") or item.get("descriptionPlain", ""),
             ))
         time.sleep(0.3)
 
@@ -1297,6 +1310,7 @@ def fetch_workday_boards() -> list[dict]:
                 work_mode  = mode,
                 job_type   = jt,
                 experience = exp,
+                desc       = info.get("jobDescription", ""),
             ))
             kept += 1
             time.sleep(0.25)
@@ -1359,6 +1373,9 @@ def fetch_usajobs() -> list[dict]:
             work_mode  = "remote" if remote else "",
             job_type   = infer_job_type(schedule, title, default="Full-time"),
             experience = "Recent grad" if "graduate" in paths.lower() else "Entry grade",
+            desc       = "<h3>Summary</h3><p>" + (details.get("JobSummary") or "") + "</p><h3>Duties</h3><ul>" +
+                         "".join(f"<li>{d}</li>" for d in details.get("MajorDuties") or []) +
+                         "</ul><h3>Qualifications</h3><p>" + (d.get("QualificationSummary") or "") + "</p>",
         ))
 
     log.info(f"  ✓ USAJobs → {len(jobs)} relevant jobs")
@@ -1439,6 +1456,7 @@ def fetch_jsearch() -> list[dict]:
                 work_mode  = "remote" if it.get("job_is_remote") else "",
                 job_type   = infer_job_type(it.get("job_employment_type", ""), title),
                 experience = exp,
+                desc       = it.get("job_description", "") or "",
             ))
         time.sleep(1.0)
 
@@ -1629,6 +1647,14 @@ def main() -> None:
 
     dupes = len(all_raw) - len(new_rows)
     log.info(f"Deduplication: {len(new_rows)} new  |  {dupes} duplicates removed")
+
+    # ── Read each new job's full posting (summary, company, years) ─────────
+    if new_rows:
+        cache = enrich_rows(new_rows, budget_s=float(os.getenv("ENRICH_BUDGET", "1200")), log=log.info)
+        before = len(new_rows)
+        new_rows = [r for r in new_rows if not is_too_experienced(cache.get(r["id"]))]
+        log.info(f"Experience filter: dropped {before - len(new_rows)} postings asking for 2+ years "
+                 f"(or LinkedIn Mid-Senior+) once the full description was read")
 
     # ── Persist & output ───────────────────────────────────────────────────
     # Full-time first, then in-person > hybrid > remote (per-group order kept)

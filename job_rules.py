@@ -136,12 +136,14 @@ _JUNIOR = re.compile(
 
 # Always blocked, even with a junior word ("Associate Director")
 _HARD_SENIOR = re.compile(
-    r"\b(staff|principal|director|vp|vice president|head of|manager|"
+    r"\b(staff|stf|principal|director|vp|vice president|head of|manager|"
     r"architect|distinguished|fellow|chief)\b", re.IGNORECASE)
 # Blocked unless an explicit junior signal is present
 _SOFT_SENIOR = re.compile(r"\b(senior|sr|lead|expert|specialist ii)\b", re.IGNORECASE)
+# "Senior Associate" is a mid-level rung (consulting/finance), not a junior one
+_SENIOR_ASSOC = re.compile(r"\b(senior|sr\.?)\s+associate\b", re.IGNORECASE)
 # Level II+ ("Engineer II", "Developer 3", "L4") — typically 2+ years
-_LEVEL_UP = re.compile(r"\b(ii|iii|iv|v|2|3|4|l[4-9])\b\s*($|[-–,(/|:])", re.IGNORECASE)
+_LEVEL_UP = re.compile(r"\b(ii|iii|iv|v|2|3|4|l[4-9]|[ep][3-9]|ic[3-9])\b\s*($|[-–,(/|:])", re.IGNORECASE)
 # Level I ("Engineer I", "Software Engineer 1")
 _LEVEL_ONE = re.compile(r"\b(i|1)\b\s*($|[-–,(/|:])", re.IGNORECASE)
 
@@ -170,7 +172,7 @@ def is_intern(title: str) -> bool:
 
 
 def is_too_senior(title: str) -> bool:
-    if _HARD_SENIOR.search(title):
+    if _HARD_SENIOR.search(title) or _SENIOR_ASSOC.search(title):
         return True
     if _LEVEL_UP.search(title) and not _LEVEL_ONE.search(title):
         return True
@@ -196,48 +198,91 @@ def is_target_title(title: str) -> bool:
 #  EXPERIENCE REQUIRED  (parsed from descriptions when a source provides them)
 # ─────────────────────────────────────────────────────────────────────────────
 
+_NUM = r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)"
+_WORD_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+             "seven": 7, "eight": 8, "nine": 9, "ten": 10}
 _YEARS_RE = re.compile(
-    r"(?<![\d.])(\d{1,2})\s*(?:\+|plus)?\s*(?:(?:-|–|to)\s*(\d{1,2})\s*\+?\s*)?"
+    rf"(?<![\d.]){_NUM}\s*(?:\+|plus)?\s*(?:(?:-|–|to)\s*{_NUM}\s*\+?\s*)?"
     r"(?:years?|yrs?)(?:['’]s?)?\s*(?:of\s+)?"
-    r"(?:[a-z/,&-]+\s+){0,5}?experience",
+    r"(?:(?:[a-z/,&-]+\s+){0,5}?(?:experience|exp\b)"
+    r"|(?:professional\s+|industry\s+|relevant\s+|hands[- ]on\s+|work\s+)?"
+    r"(?:working|building|developing|designing|writing|programming|coding|shipping|"
+    r"in\s+(?:a\s+)?(?:software|engineering|development|the industry|industry|professional|related|"
+    r"similar|data|it\b|web|back|front|full|production|a\s+\w+\s+role)))",
     re.IGNORECASE)
 _NO_EXP_RE = re.compile(
     r"no (?:prior |professional )?experience (?:is )?(?:required|necessary|needed)|"
     r"new grad|recent graduate|entry[- ]level|0\s*(?:-|–|to)\s*[12]\s*years?",
     re.IGNORECASE)
-MAX_YEARS = 2          # drop postings whose minimum requirement is above this
+# sentences whose years don't count as the real requirement
+_PREFERRED_RE = re.compile(
+    r"prefer|nice[- ]to[- ]have|bonus|a plus|is a plus|ideally|desired|desirable|would be great|"
+    r"in lieu of|instead of a degree|without a degree|equivalent combination", re.IGNORECASE)
+# "we've served clients for 15+ years" — about the company, not the candidate
+_COMPANY_YEARS_RE = re.compile(
+    r"\b(we|we've|we have|our|us)\b.*\byears\b|for (over|more than) \d+ years|years in business|years of (service|history)",
+    re.IGNORECASE)
+_CANDIDATE_RE = re.compile(r"\byou\b|\byour\b|candidate|applicant|required|requirement|must|minimum|qualif", re.IGNORECASE)
+_ADV_DEGREE_RE = re.compile(r"master|ph\.?d|doctora|advanced degree|graduate degree|\bms\b|\bm\.s\.", re.IGNORECASE)
+_SENTENCE_SPLIT = re.compile(r"(?<=[.;!?•·])\s+|\n+|\s{2,}|•")
+
+MAX_YEARS = 1          # 0–1 years: drop postings whose (minimum) requirement is above this
 STRICT_MAX_YEARS = 1   # plain titles (no junior signal): every mention must be ≤ this
 
 
 def html_to_text(raw: str) -> str:
     """Greenhouse/Ashby descriptions arrive as (sometimes escaped) HTML."""
     text = html.unescape(html.unescape(raw or ""))
+    text = re.sub(r"<(br|/p|/li|/div|/h\d)[^>]*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", text)
+    return re.sub(r"[ \t\r\f\v]+", " ", text)
+
+
+def _year_mentions(text: str) -> list[int]:
+    """
+    Required-years figures, one per sentence that states one. Preferred /
+    nice-to-have / degree-substitute sentences are skipped; a figure that
+    only applies with a Master's/PhD is used only if nothing else is stated
+    ("BS + 3 years, or MS + 1 year" → 3, not 1).
+    """
+    basic, advanced = [], []
+    # "FOUR (4) years" / "two (2) years" → "4 years"
+    text = re.sub(r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\s*\((\d{1,2})\)", r"\1", text or "", flags=re.IGNORECASE)
+    text = re.sub(r"\b(\d{1,2})\s*\(\1\)", r"\1", text)
+    for sent in _SENTENCE_SPLIT.split(text):
+        if not sent or _PREFERRED_RE.search(sent):
+            continue
+        if _COMPANY_YEARS_RE.search(sent) and not _CANDIDATE_RE.search(sent):
+            continue
+        # "BS and 3 years, or MS and 1 year" — judge each alternative on its own
+        for clause in re.split(r"\bor\b", sent, flags=re.IGNORECASE):
+            for m in _YEARS_RE.finditer(clause):
+                raw = m.group(1).lower()
+                n = _WORD_NUM.get(raw) if not raw.isdigit() else int(raw)
+                if n is None or n > 15:
+                    continue
+                (advanced if _ADV_DEGREE_RE.search(clause) else basic).append(n)
+    return basic or advanced
 
 
 def min_years_required(text: str) -> int | None:
     """
-    Smallest 'N years of experience' figure in a description, or None if the
-    posting never states one. Taking the minimum means "3+ years, or 1 year
-    with a relevant degree" counts as 1 — lenient on purpose.
+    The posting's minimum required years (lowest figure among the real
+    requirements), 0 for explicit no-experience / new-grad wording, or None
+    if it never says.
     """
     if not text:
         return None
-    mins = []
-    for m in _YEARS_RE.finditer(text):
-        n = int(m.group(1))
-        if n <= 15:
-            mins.append(n)
-    if mins:
-        return min(mins)
+    mentions = _year_mentions(text)
+    if mentions:
+        return min(mentions)
     return 0 if _NO_EXP_RE.search(text) else None
 
 
 def max_years_required(text: str) -> int | None:
-    """Largest 'N years' minimum mentioned (None if none) — the strict reading."""
-    mins = [int(m.group(1)) for m in _YEARS_RE.finditer(text or "") if int(m.group(1)) <= 15]
-    return max(mins) if mins else None
+    """Largest required-years figure (None if none) — the strict reading."""
+    mentions = _year_mentions(text)
+    return max(mentions) if mentions else None
 
 
 def experience_label(years: int | None) -> str:

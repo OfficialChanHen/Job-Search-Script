@@ -12,7 +12,7 @@ jobs:
   hunt:
     name: Fetch job listings
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     permissions:
       contents: write   # needed to commit results back to the repo
@@ -50,6 +50,11 @@ jobs:
           # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
           JSEARCH_KEY:    ${{ secrets.JSEARCH_KEY }}
         run: python job_hunter.py
+
+      # ── 4b. Read older postings in the background (summaries, years, company) ──
+      - name: Enrich backlog of older postings
+        continue-on-error: true
+        run: python enrich.py --budget 600
 
       # ── 5. Build the dashboard (docs/index.html → GitHub Pages) ────────────
       - name: Build dashboard

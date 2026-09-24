@@ -28,6 +28,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from enrich import COMPANY_FILE, ENRICH_FILE, company_key, is_too_experienced
 from interview_prep import prep_for, prep_text
 from job_rules import (
     CATEGORY_LABEL, SWE_CATEGORIES, infer_job_type, is_target_title,
@@ -107,8 +108,20 @@ PREPS: list[dict] = []
 _PREP_INDEX: dict[str, int] = {}
 
 
-def _prep_id(title: str, company: str) -> int:
-    prep = prep_for(title, company)
+def _load_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+ENRICH = _load_json(ENRICH_FILE)        # per job: summary, years, topics (enrich.py)
+COMPANIES = _load_json(COMPANY_FILE)    # per company: summary + source
+USED_COMPANIES: dict[str, dict] = {}    # only the ones shipped in the page
+
+
+def _prep_id(title: str, company: str, topics: list | None = None, seed: str = "") -> int:
+    prep = prep_for(title, company, topics=topics, seed=seed)
     key = json.dumps(prep, sort_keys=True)
     if key not in _PREP_INDEX:
         _PREP_INDEX[key] = len(PREPS)
@@ -122,6 +135,9 @@ def keep_row(row: dict) -> bool:
         return False
     title = row.get("title", "")
     if not is_target_title(title) or row.get("job_type") == "Internship":
+        return False
+    # the full posting (enrich.py) asks for 2+ years, or LinkedIn says Mid-Senior+
+    if is_too_experienced(ENRICH.get(row.get("id", ""))):
         return False
     loc = row.get("location", "") or ""
     strict = row.get("source") in GLOBAL_REMOTE_SOURCES and not row.get("job_type")
@@ -150,7 +166,10 @@ def classify_and_score(row: dict) -> dict:
             chips.append(label)
             claimed.add(label)
 
-    junior = bool(JUNIOR_RE.search(title)) or row.get("experience", "") in (
+    rec = ENRICH.get(row.get("id", "")) or {}
+    years = rec.get("y")
+    exp = ("0 yrs" if years == 0 else f"{years} yr" if years is not None else "") or row.get("experience", "")
+    junior = bool(JUNIOR_RE.search(title)) or (years is not None and years <= 1) or row.get("experience", "") in (
         "0 yrs", "1+ yrs", "Entry-level", "New grad", "Recent grad", "Entry grade")
     local = bool(MN_RE.search(loc))
     job_type = row.get("job_type") or infer_job_type(
@@ -179,6 +198,17 @@ def classify_and_score(row: dict) -> dict:
     score += TYPE_SCORE.get(job_type, 0)
     if category in SWE_CATEGORIES:
         score += 1
+    if years is not None and years <= 1:     # confirmed 0–1 years from the posting
+        score += 2
+
+    # company summary: the posting's own "About us", else the shared company cache
+    ck = company_key(row.get("company", ""))
+    co = COMPANIES.get(ck) or {}
+    if rec.get("about"):
+        USED_COMPANIES.setdefault(ck, {"s": rec["about"], "src": "posting"})
+    elif co.get("s"):
+        USED_COMPANIES.setdefault(ck, {k: co[k] for k in ("s", "src", "u") if co.get(k)})
+    summary = {k: rec[k] for k in ("sum", "do", "need", "pay", "stack") if rec.get(k)}
 
     return {
         "id": row.get("id", ""),
@@ -200,9 +230,12 @@ def classify_and_score(row: dict) -> dict:
         "cat": category,
         "catLabel": CATEGORY_LABEL.get(category, "SWE"),
         "swe": category in SWE_CATEGORIES,
-        "exp": row.get("experience", ""),
+        "exp": exp,
         "gradWindow": bool(GRAD_WINDOW_RE.search(title)),
-        "prep": _prep_id(title, row.get("company", "")),
+        "prep": _prep_id(title, row.get("company", ""), rec.get("tp"), row.get("id", "")),
+        "gone": rec.get("st") == "gone",
+        **({"sm": summary} if summary else {}),
+        **({"ck": ck} if ck in USED_COMPANIES else {}),
     }
 
 
@@ -263,7 +296,7 @@ def flag_closed_and_reposts(jobs: list[dict]) -> None:
         src = LIVE_SOURCE_ALIAS.get(j["source"], j["source"])
         snap = live_sets.get((src, (j["company"] or "").strip().lower()))
         tracked = bool(snap) and _days(snap[0], latest) <= LIVE_MAX_AGE_DAYS
-        j["closed"] = bool(tracked and j["date"] < snap[0] and url_key(j["url"]) not in snap[1])
+        j["closed"] = j.pop("gone", False) or bool(tracked and j["date"] < snap[0] and url_key(j["url"]) not in snap[1])
         j["reposts"] = len(days_seen[key(j)])
         j["stale"] = (not tracked) and _days(j["date"], latest) > STALE_DAYS
         if j["reposts"] >= REPOST_MIN:
@@ -281,10 +314,12 @@ def build_html(jobs: list[dict]) -> str:
     # </ must be escaped so job titles can never terminate the <script> block
     jobs_json = json.dumps(jobs, ensure_ascii=False).replace("</", "<\\/")
     preps_json = json.dumps(PREPS, ensure_ascii=False).replace("</", "<\\/")
+    companies_json = json.dumps(USED_COMPANIES, ensure_ascii=False).replace("</", "<\\/")
 
     return HTML_TEMPLATE \
         .replace("__JOBS_JSON__", jobs_json) \
         .replace("__PREPS_JSON__", preps_json) \
+        .replace("__COMPANIES_JSON__", companies_json) \
         .replace("__GENERATED__", generated) \
         .replace("__LATEST_DAY__", latest_day)
 
@@ -606,6 +641,24 @@ button, input, select { font: inherit; }
 .chip.flag-sheet { background: var(--good-bg); color: var(--good); }
 .job.is-closed { opacity: .72; }
 
+/* job + company summary panel */
+.sumbox { grid-column: 2 / -1; margin-top: 12px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
+.sumbox > div { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--ink-2); }
+.sumbox h4 { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+.sumbox h4 + p, .sumbox p { margin: 0 0 8px; color: var(--ink-1); line-height: 1.5; }
+.sumbox ul { margin: 0 0 8px; padding-left: 18px; }
+.sumbox li { margin: 2px 0; line-height: 1.45; }
+.sumbox .kv { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.sumbox .src { font-size: 11.5px; color: var(--ink-3); }
+.sumbox .src a { color: var(--series-1-ink); }
+.sumbox .none { color: var(--ink-3); font-style: italic; }
+@media (max-width: 760px) { .sumbox { grid-template-columns: 1fr; grid-column: 1; } }
+.qp-card .sumline { margin-top: 12px; font-size: 13.5px; color: var(--ink-1); line-height: 1.5; }
+.qp-card .sumline ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
+.qp-card .coline { margin-top: 10px; font-size: 12.5px; color: var(--ink-3); line-height: 1.45; }
+.qp-confirm { grid-template-columns: 1.4fr 1fr 1fr !important; }
+.qp-confirm .pass { color: var(--crit); }
+
 /* referral panel */
 .ref { grid-column: 2 / -1; margin-top: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 13px; }
 .ref .links { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
@@ -804,9 +857,10 @@ button, input, select { font: inherit; }
   <div class="qp-confirm" id="qpConfirm" hidden>
     <p>Did you submit the application?</p>
     <button class="yes" data-act="yes">✓ Yes, applied <small>(Enter)</small></button>
-    <button data-act="later">Not yet, save it</button>
+    <button data-act="later">Not yet, save it <small>(↑)</small></button>
+    <button class="pass" data-act="nope">✕ Didn't apply, pass <small>(←)</small></button>
   </div>
-  <div class="qp-hint">← pass · ↑ save · → open &amp; apply · Esc to exit — works on your current tab &amp; filters</div>
+  <div class="qp-hint">← pass · ↑ save · → open &amp; apply (then Enter = applied · ↑ save · ← pass) · Esc to exit — plays your current tab &amp; filters</div>
   <div class="qp-tip" id="qpTip"></div>
 </div>
 <canvas id="confetti"></canvas>
@@ -814,6 +868,7 @@ button, input, select { font: inherit; }
 <script>
 const JOBS = __JOBS_JSON__;
 const PREPS = __PREPS_JSON__;
+const COMPANIES = __COMPANIES_JSON__;
 const LATEST = "__LATEST_DAY__";
 const PAGE = 100;
 
@@ -997,6 +1052,7 @@ function card(j) {
       <div class="actions">
         <button class="${s === "applied" ? "on-applied" : ""}" onclick="setStatus('${j.id}','${s === "applied" ? "" : "applied"}')">✓ Applied${s === "applied" && statusMap[j.id] ? " " + statusMap[j.id].t.slice(5) : ""}</button>
         <button class="${s === "saved" ? "on-saved" : ""}" onclick="setStatus('${j.id}','${s === "saved" ? "" : "saved"}')">★ Save${s === "saved" ? "d" : ""}</button>
+        <button class="${openSum[j.id] ? "on" : ""}" onclick="toggleSum('${j.id}')">📄 Summary</button>
         <button class="${openPrep[j.id] ? "on" : ""}" onclick="togglePrep('${j.id}')">${PREPS[j.prep].coding ? "🧠 LeetCode prep" : "🧠 Interview prep"}</button>
         <button class="${openRef[j.id] ? "on" : ""}" onclick="toggleRef('${j.id}')">🤝 Referral${game.outreach[j.id] ? " ✓" : ""}</button>
         <button onclick="copyRow('${j.id}')" title="Copy as a row for your Google Sheet">📋 Copy row</button>
@@ -1004,6 +1060,7 @@ function card(j) {
       </div>
     </div>
     <a class="apply-btn" href="${esc(j.url)}" target="_blank" rel="noopener">Apply ↗</a>
+    ${openSum[j.id] ? sumPanel(j) : ""}
     ${openPrep[j.id] ? prepPanel(PREPS[j.prep]) : ""}
     ${openRef[j.id] ? refPanel(j) : ""}
   </div>`;
@@ -1019,6 +1076,28 @@ function prepPanel(p) {
 }
 
 function togglePrep(id) { openPrep[id] = !openPrep[id]; render(); }
+
+/* ── 📄 job + company summary (from the full posting — enrich.py) ─ */
+const openSum = {};
+function toggleSum(id) { openSum[id] = !openSum[id]; render(); }
+function companyOf(j) { return j.ck ? COMPANIES[j.ck] : null; }
+function sumPanel(j) {
+  const m = j.sm || {}, co = companyOf(j);
+  const list = xs => xs && xs.length ? "<ul>" + xs.map(x => "<li>" + esc(x) + "</li>").join("") + "</ul>" : "";
+  const job = (m.sum || m.do || m.need)
+    ? `${m.sum ? "<p>" + esc(m.sum) + "</p>" : ""}
+       ${m.do ? "<h4>What you'd do</h4>" + list(m.do) : ""}
+       ${m.need ? "<h4>What they want</h4>" + list(m.need) : ""}
+       <div class="kv">${j.exp ? '<span class="chip flag-src">🎓 ' + esc(j.exp) + "</span>" : ""}
+         ${m.pay ? '<span class="chip type-ft">💵 ' + esc(m.pay) + "</span>" : ""}
+         ${(m.stack || []).map(t => '<span class="chip">' + esc(t) + "</span>").join("")}</div>`
+    : '<p class="none">The full posting hasn\'t been read yet (it\'s fetched during the daily run) — open it with Apply ↗.</p>';
+  const company = co && co.s
+    ? `<p>${esc(co.s)}</p><div class="src">Source: ${co.src === "Wikipedia" && co.u
+        ? '<a href="' + esc(co.u) + '" target="_blank" rel="noopener">Wikipedia</a>' : "the job posting"}</div>`
+    : `<p class="none">No company description found.</p><div class="src"><a href="https://www.google.com/search?q=${encodeURIComponent(j.company + " company")}" target="_blank" rel="noopener">Search ${esc(j.company)} ↗</a></div>`;
+  return `<div class="sumbox"><div><h4>📄 The job</h4>${job}</div><div><h4>🏢 ${esc(j.company) || "The company"}</h4>${company}</div></div>`;
+}
 
 /* ── rows in the tracker sheet's column order ──────────────── */
 const SHEET_COLS = ["Last Update", "Company", "Job", "Location", "Status", "Application", "Job Type", "LeetCode Prep"];
@@ -1415,6 +1494,8 @@ function qpShow() {
       <div class="score ${j.score >= 10 ? "hot" : ""}">${j.score}<small>match</small></div>
     </div>
     <div class="badges">${cardBadges(j)}</div>
+    ${(j.sm && (j.sm.sum || j.sm.do)) ? `<div class="sumline">${esc((j.sm.sum || "").slice(0, 260))}${j.sm.do ? "<ul>" + j.sm.do.slice(0, 2).map(x => "<li>" + esc(x) + "</li>").join("") + "</ul>" : ""}</div>` : ""}
+    ${companyOf(j) && companyOf(j).s ? `<div class="coline">🏢 ${esc(companyOf(j).s.slice(0, 220))}</div>` : ""}
     <div class="focus"><b>${p.coding ? "🧠 Coding interview likely" : "🗣 Usually no coding round"}</b> — ${esc(p.focus)}${probs ? `<ol>${probs}</ol>` : ""}</div>`;
 }
 function qpNext(dir, xp) {
@@ -1443,6 +1524,7 @@ function qpAct(act) {
     document.getElementById("qpConfirm").hidden = false;
   } else if (act === "yes") { setStatus(j.id, "applied", { quiet: true }); qpNext("right", 50); }
   else if (act === "later") { setStatus(j.id, "saved", { quiet: true }); qpNext("up", 10); }
+  else if (act === "nope") { setStatus(j.id, "hidden", { quiet: true }); qpNext("left", 0); }
 }
 document.getElementById("qp").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (b) qpAct(b.dataset.act);
@@ -1458,6 +1540,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") qpClose();
   else if (confirming && e.key === "Enter") qpAct("yes");
   else if (confirming && (e.key === "ArrowUp" || e.key === "Backspace")) qpAct("later");
+  else if (confirming && e.key === "ArrowLeft") qpAct("nope");
   else if (!confirming && e.key === "ArrowLeft") qpAct("pass");
   else if (!confirming && e.key === "ArrowUp") qpAct("save");
   else if (!confirming && e.key === "ArrowRight") qpAct("apply");

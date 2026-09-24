@@ -20,8 +20,13 @@ your resume skills, entry-level signals, full-time, in-person and Minnesota.
 - Filters: **job type** (defaults to Full-time), **role** (SWE, Frontend, Data/BI, Solutions/FDE, QA, Cloud, IT…), source, sort
 - Every card shows **Full-time / Contract / Part-time**, work mode, role category, stated experience,
   and a **⚠ check grad window** flag on class-of-2026/2027 new-grad postings
-- **🧠 LeetCode prep** on each job: what the interview usually tests for that role
-  (and company, where there's a well-known pattern) plus 4–6 specific LeetCode problems with links
+- **📄 Summary** on each job, read from the full posting: what the role is, what you'd do, what
+  they want, pay, tech stack, and required years — plus a **company summary** (the posting's
+  "About us", else Wikipedia)
+- **🧠 LeetCode prep** on each job: what the interview usually tests for that role (and company,
+  where there's a well-known pattern) plus 6 problems chosen **for that job** — from ~175 problems
+  in 20 topic pools, weighted by what the posting emphasizes (routing/logistics → graphs,
+  real-time → heaps, databases → SQL, React → JS…), so different jobs get different lists
 - Track per job: **✓ Applied / ★ Save / Hide** (stored in your browser)
 - **Google Sheets:** ✓ Applied auto-adds a row to your tracker (see [sheet-sync/README.md](sheet-sync/README.md));
   **📋 Copy row** copies any job in your sheet's column order for pasting;
@@ -58,8 +63,9 @@ Job hunting, but with XP — so it's less of a grind:
   Un-marking something takes its XP back.
 - **Daily quests:** apply to 3 jobs, solve or review 2 LeetCode problems, reach out or follow up once,
   triage 10 jobs — plus a 🔥 activity streak.
-- **🎮 Quick Play:** one job at a time, keyboard-driven — **←** pass, **↑** save, **→** open & apply
-  (it asks "did you submit?" before counting it). Combos, confetti, and a job-search tip each round.
+- **🎮 Quick Play:** one job at a time with its summary, keyboard-driven — **←** pass, **↑** save,
+  **→** open & apply. After opening, it asks "did you submit?": **Enter** applied · **↑** save for
+  later · **←** didn't apply, pass. Combos, confetti, and a job-search tip each round.
   It plays whatever tab + filters you have selected, so pick *Minnesota* or *Full-time · SWE* first.
 - **🏆 20 badges** — First Blood, Local Legend, Touch Grass (in-person), Connector, Persistent,
   Grinder, Spaced Out, Boss Battle (first interview), Offer!…
@@ -96,10 +102,15 @@ up or growing, and they fit a CS + Data Science background:
 AI-trainer coding contracts (DataAnnotation, Outlier, Mercor) are matched too, but
 they're 1099 contract work — useful side income, ranked below full-time roles.
 
-**Filtered out:** internships / co-ops / student roles, senior/staff/lead/manager,
-level II+ titles, clearance-required (TS/SCI) roles, hardware-only engineering, and
-any posting that asks for **more than 2 years** (junior titles) or **more than 1 year**
-(plain titles like "Software Engineer") when the description states it.
+**Filtered out:** internships / co-ops / student roles, senior/staff/lead/manager / "Senior
+Associate", level II+ titles (II, 3, E3+, P3+), clearance-required (TS/SCI) roles, hardware-only
+engineering, and anything whose **full posting asks for 2+ years** — the target is **0–1 years**.
+
+Every new job's full posting is read (`enrich.py`) — including LinkedIn, Dice and the new-grad
+lists, whose search results don't show requirements — so "entry level" labels that turn out to
+want 3–5 years are dropped. Years are read from the requirements, not "preferred"/"nice to have"
+lines; "BS + 3 years or MS + 1 year" counts as 3; LinkedIn "Mid-Senior level" is dropped too.
+Older jobs are re-checked a few hundred per day.
 
 ---
 
@@ -171,6 +182,7 @@ Preview it locally with `python notify.py --dry-run`.
 pip install -r requirements.txt
 python job_hunter.py                 # all sources
 python job_hunter.py linkedin dice   # just some sources (substring of fetch_* names)
+python enrich.py --budget 600        # read older postings (summaries / years), 10 min
 python build_dashboard.py
 python notify.py --dry-run           # preview the morning digest
 ```
@@ -184,6 +196,8 @@ data/
   seen_jobs.json          ← tracks all seen IDs (prevents duplicates across days)
   jobs_2026-09-23.csv     ← that day's new listings
   live_jobs.json          ← which postings are still up on each board (closed-job detection)
+  enrich.json             ← per job: summary, required years, topics (from the full posting)
+  companies.json          ← per company: summary + source
 logs/
   job_hunter_2026-09-23.log   ← full debug log for each run (API keys are redacted)
 ```
