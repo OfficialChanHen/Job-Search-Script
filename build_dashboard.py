@@ -28,7 +28,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from enrich import COMPANY_FILE, ENRICH_FILE, company_key, is_too_experienced
+from enrich import COMPANY_FILE, ENRICH_FILE, STACK, company_key, is_too_experienced
 from interview_prep import prep_for, prep_text
 from job_rules import (
     CATEGORY_LABEL, SWE_CATEGORIES, infer_job_type, is_target_title,
@@ -315,11 +315,14 @@ def build_html(jobs: list[dict]) -> str:
     jobs_json = json.dumps(jobs, ensure_ascii=False).replace("</", "<\\/")
     preps_json = json.dumps(PREPS, ensure_ascii=False).replace("</", "<\\/")
     companies_json = json.dumps(USED_COMPANIES, ensure_ascii=False).replace("</", "<\\/")
+    # same skill vocabulary enrich.py uses on postings, so resumes are read the same way
+    vocab_json = json.dumps([[label, rx, "" if label == "R" else "i"] for label, rx in STACK]).replace("</", "<\\/")
 
     return HTML_TEMPLATE \
         .replace("__JOBS_JSON__", jobs_json) \
         .replace("__PREPS_JSON__", preps_json) \
         .replace("__COMPANIES_JSON__", companies_json) \
+        .replace("__SKILL_VOCAB__", vocab_json) \
         .replace("__GENERATED__", generated) \
         .replace("__LATEST_DAY__", latest_day)
 
@@ -641,6 +644,14 @@ button, input, select { font: inherit; }
 .chip.flag-sheet { background: var(--good-bg); color: var(--good); }
 .job.is-closed { opacity: .72; }
 
+.drop {
+  display: grid; place-items: center; min-height: 86px; border: 2px dashed var(--border-strong); border-radius: 12px;
+  color: var(--ink-2); cursor: pointer; background: var(--plane); transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.over { border-color: var(--series-1); background: var(--chip-bg); color: var(--series-1-ink); }
+.chip.flag-res { background: var(--chip-bg); color: var(--chip-ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--series-1); }
+.sumbox.three { grid-template-columns: 1.4fr 1fr 1fr; }
+@media (max-width: 900px) { .sumbox.three { grid-template-columns: 1fr; } }
 /* job + company summary panel */
 .sumbox { grid-column: 2 / -1; margin-top: 12px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
 .sumbox > div { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--ink-2); }
@@ -820,12 +831,24 @@ button, input, select { font: inherit; }
   <div class="bar-row">
     <div class="count-note" id="countNote"></div>
     <div class="toolbar">
+      <button id="resBtn" title="Drop your resumes to see which fits each job (stays in this browser)">📄 My resumes</button>
       <button id="resultsBtn" title="Response rates from your Google Sheet">📈 Results</button>
       <button id="syncBtn" title="Connect your Google Sheet">⚙ Sheet sync</button>
       <button id="exportBtn" title="Download Applied + Saved in your sheet's column order">⬇ Export tracked</button>
     </div>
   </div>
 
+  <div class="settings" id="resPanel" hidden>
+    <h2>📄 My resumes</h2>
+    <p>Drop your resume PDFs here (text files work too). They're read <b>inside this browser</b> and only the list of
+       skills found is kept here — nothing is uploaded, and nothing goes to GitHub. Every job then shows which resume
+       covers the most of the skills its posting asks for, and which skills none of them mention.</p>
+    <label class="drop" id="resDrop">
+      <input type="file" id="resFile" accept=".pdf,.txt,.md,.html,application/pdf" multiple hidden>
+      <span>⬇ Drag &amp; drop PDFs here, or <u>choose files</u></span>
+    </label>
+    <div class="fu-list" id="resList" style="margin-top:10px"></div>
+  </div>
   <div class="settings" id="settings" hidden>
     <h2>📗 Google Sheets auto-fill</h2>
     <p>When you mark a job <strong>✓ Applied</strong>, a row is added to your tracker sheet
@@ -1033,6 +1056,7 @@ function cardBadges(j) {
     j.reposts >= 3 ? `<span class="chip flag-warn" title="Same title, company and location posted on ${j.reposts} different days — high-volume hiring, or an evergreen/ghost listing. Worth a referral before applying.">🔁 Posted ${j.reposts}×</span>` : "",
     j.stale ? '<span class="chip flag-src" title="Found 30+ days ago and this source can\'t be re-checked — may be filled">📅 30+ days old</span>' : "",
     (() => { const r = sheetRowFor(j.url); return r && r.status ? '<span class="chip flag-sheet">📗 ' + esc(r.status) + "</span>" : ""; })(),
+    fitChip(j),
     j.gradWindow ? '<span class="chip flag-warn" title="New-grad posting — check the required graduation window; many also accept grads within 12–24 months">⚠ check grad window</span>' : "",
     ...j.chips.map(c => '<span class="chip">' + esc(c) + "</span>"),
     '<span class="chip muted">' + esc(j.source) + " · " + esc(j.date) + "</span>",
@@ -1096,7 +1120,8 @@ function sumPanel(j) {
     ? `<p>${esc(co.s)}</p><div class="src">Source: ${co.src === "Wikipedia" && co.u
         ? '<a href="' + esc(co.u) + '" target="_blank" rel="noopener">Wikipedia</a>' : "the job posting"}</div>`
     : `<p class="none">No company description found.</p><div class="src"><a href="https://www.google.com/search?q=${encodeURIComponent(j.company + " company")}" target="_blank" rel="noopener">Search ${esc(j.company)} ↗</a></div>`;
-  return `<div class="sumbox"><div><h4>📄 The job</h4>${job}</div><div><h4>🏢 ${esc(j.company) || "The company"}</h4>${company}</div></div>`;
+  return `<div class="sumbox three"><div><h4>📄 The job</h4>${job}</div><div><h4>🏢 ${esc(j.company) || "The company"}</h4>${company}</div>
+    <div><h4>🎯 Resume fit</h4>${fitBox(j)}</div></div>`;
 }
 
 /* ── rows in the tracker sheet's column order ──────────────── */
@@ -1816,6 +1841,138 @@ function closeSide() { document.getElementById("sidePanel").hidden = true; sideV
 document.getElementById("fuBtn").onclick = () => sideView === "followups" ? closeSide() : openSide("followups");
 document.getElementById("revBtn").onclick = () => sideView === "reviews" ? closeSide() : openSide("reviews");
 document.getElementById("resultsBtn").onclick = () => { if (sideView === "results") return closeSide(); openSide("results"); loadSheetRows(false); };
+
+/* ═══ 📄 MY RESUMES — read and kept in this browser only ════════════
+   Drop PDFs (or text) into the panel; each job then shows which resume
+   covers the most of the skills its posting asks for.               */
+const SKILL_VOCAB = __SKILL_VOCAB__.map(([l, rx, fl]) => [l, new RegExp(rx, fl)]);
+const CHIP_TO_SKILL = { "React": "React", "React Native": "React Native", "TypeScript": "TypeScript", "Next.js": "Next.js",
+  "Tailwind": "Tailwind CSS", "JavaScript": "JavaScript", "Python": "Python", "SQL": "SQL", "GraphQL": "GraphQL",
+  "Node": "Node.js", "Figma": "Figma", "Java": "Java", "REST": "REST APIs", "CSS": "HTML/CSS", "Pandas": "pandas", "Expo": "Expo" };
+const LS_RES = "chan-resumes-v1";
+let resumes = [];
+try { resumes = JSON.parse(localStorage.getItem(LS_RES) || "[]"); } catch (e) {}
+function saveResumes() {
+  try { localStorage.setItem(LS_RES, JSON.stringify(resumes)); }
+  catch (e) { toast("Couldn't save — this browser's storage is full or blocked", true); }
+}
+const skillsIn = text => SKILL_VOCAB.filter(([, rx]) => rx.test(text)).map(([l]) => l);
+// resume name → [role categories it's built for, ones it also suits]
+const ROLE_HINTS = [
+  [/front[- ]?end/i, ["frontend", "mobile"], ["swe"]],
+  [/full[- ]?stack/i, ["swe", "devops", "solutions", "qa", "platform_dev"], ["frontend", "mobile", "data_eng"]],
+  [/\bdata\b/i, ["data_analyst", "data_eng", "analyst"], ["ml_ai"]],
+  [/\bai\b|machine learning|\bml\b/i, ["ml_ai", "ai_training"], ["data_eng", "data_analyst", "swe"]],
+];
+function roleFit(r, cat) {
+  let best = 0;
+  ROLE_HINTS.forEach(([rx, primary, secondary]) => {
+    if (rx.test(r.name)) best = Math.max(best, primary.includes(cat) ? 12 : secondary.includes(cat) ? 6 : 0);
+  });
+  return best;
+}
+const shortName = n => (n.replace(/\.(pdf|txt|md|html?)$/i, "").replace(/^.*?\bhen[-_ ]*/i, "")
+  .replace(/[-_ ]*resume[-_ ]*/i, " ").replace(/[-_]+/g, " ").trim() || n);
+function jobSkills(j) {
+  const s = new Set((j.sm && j.sm.stack) || []);
+  j.chips.forEach(c => { if (CHIP_TO_SKILL[c]) s.add(CHIP_TO_SKILL[c]); });
+  return [...s];
+}
+function fitFor(j) {
+  if (!resumes.length) return null;
+  const need = jobSkills(j);
+  const all = resumes.map(r => {
+    const have = need.filter(k => r.skills.includes(k));
+    const role = roleFit(r, j.cat);
+    const pct = need.length ? have.length / need.length : 0;
+    return { r, have, missing: need.filter(k => !have.includes(k)), pct, role, score: pct * 100 + role };
+  }).sort((a, b) => b.score - a.score);
+  return { best: all[0], all, need };
+}
+function fitChip(j) {
+  const f = fitFor(j);
+  if (!f) return "";
+  const b = f.best, label = shortName(b.r.name);
+  const tip = f.need.length ? `Covers ${b.have.length} of the ${f.need.length} skills this posting names` +
+    (b.missing.length ? ` · not on it: ${b.missing.join(", ")}` : "") : "Best match for this role type";
+  return `<span class="chip flag-res" title="${esc(tip)}">📄 ${esc(label)}${f.need.length ? ` · ${b.have.length}/${f.need.length}` : ""}</span>`;
+}
+function fitBox(j) {
+  const f = fitFor(j);
+  if (!f) return `<p class="none">Drop your resume PDFs into <b>📄 My resumes</b> (toolbar) to see which one fits this job best.</p>`;
+  const rows = f.all.map(x => `<div class="rrow"><span>${esc(shortName(x.r.name))}${x === f.best ? " ⭐" : ""}</span>
+      <div class="track"><div class="fill" style="width:${Math.round(x.pct * 100)}%"></div></div>
+      <span class="num">${f.need.length ? `${x.have.length}/${f.need.length} skills` : (x.role >= 12 ? "built for this role" : x.role ? "suits this role" : "—")}</span></div>`).join("");
+  const miss = f.best.missing.length
+    ? `<p class="src">Posting mentions, not on your <b>${esc(shortName(f.best.r.name))}</b> resume: ${f.best.missing.map(esc).join(", ")}.
+       Add one only if you've actually used it — interviewers ask about everything listed.</p>` : "";
+  return rows + miss;
+}
+
+/* ── panel: drag & drop / choose files ───────────────────── */
+let pdfjsP = null;
+function loadPdfJs() {
+  return pdfjsP = pdfjsP || import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs").then(m => {
+    m.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+    return m;
+  });
+}
+const readAs = (file, how) => new Promise((ok, bad) => {
+  const fr = new FileReader();
+  fr.onload = () => ok(fr.result); fr.onerror = () => bad(fr.error);
+  how === "buffer" ? fr.readAsArrayBuffer(file) : fr.readAsText(file);
+});
+async function fileText(file) {
+  if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+    const pdfjs = await loadPdfJs();
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(await readAs(file, "buffer")) }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const c = await (await doc.getPage(i)).getTextContent();
+      pages.push(c.items.map(it => it.str).join(" "));
+    }
+    return pages.join("\n");
+  }
+  const raw = await readAs(file, "text");
+  if (!/\.html?$/i.test(file.name)) return raw;
+  // keep words in separate elements apart ("Tools</h3><p>Git" → "Tools Git")
+  const spaced = raw.replace(/<(\/?(p|div|h\d|li|ul|span|td|tr|br|section|header)\b[^>]*)>/gi, " <$1> ");
+  return new DOMParser().parseFromString(spaced, "text/html").body.textContent;
+}
+async function addResumeFiles(files) {
+  for (const file of files) {
+    try {
+      const text = (await fileText(file)).replace(/\s+/g, " ").trim();
+      if (text.length < 200) { toast(`${file.name}: couldn't read any text (scanned image?)`, true); continue; }
+      const entry = { name: file.name, skills: skillsIn(text), chars: text.length, added: localDay() };
+      resumes = resumes.filter(r => r.name !== file.name).concat(entry);
+      toast(`📄 ${shortName(file.name)}: ${entry.skills.length} skills found`);
+    } catch (e) {
+      toast(`${file.name}: couldn't read it (${e.message || e})`, true);
+    }
+  }
+  saveResumes(); renderResPanel(); render();
+}
+function removeResume(name) { resumes = resumes.filter(r => r.name !== name); saveResumes(); renderResPanel(); render(); }
+function renderResPanel() {
+  document.getElementById("resBtn").innerHTML = `📄 My resumes${resumes.length ? ` (${resumes.length})` : ""}`;
+  document.getElementById("resList").innerHTML = resumes.length ? resumes.map(r => `
+    <div class="fu"><div><b>${esc(shortName(r.name))}</b> <span class="sub2">${esc(r.name)}</span>
+      <div class="sub2">${r.skills.length} skills: ${r.skills.map(esc).join(", ")}</div></div>
+      <div class="btns"><button class="mini" onclick="removeResume(${esc(JSON.stringify(r.name))})">Remove</button></div></div>`).join("")
+    : '<div class="lead">No resumes yet.</div>';
+}
+(() => {
+  const drop = document.getElementById("resDrop"), input = document.getElementById("resFile");
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => addResumeFiles([...e.dataTransfer.files]));
+  input.addEventListener("change", () => { addResumeFiles([...input.files]); input.value = ""; });
+  document.getElementById("resBtn").onclick = () => {
+    const p = document.getElementById("resPanel"); p.hidden = !p.hidden; renderResPanel();
+  };
+  renderResPanel();
+})();
 
 refreshSyncUI();
 renderChart();

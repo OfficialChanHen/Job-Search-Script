@@ -428,8 +428,18 @@ STACK = [
     ("Excel", r"\bexcel\b"), ("pandas", r"pandas"), ("PyTorch", r"pytorch"), ("TensorFlow", r"tensorflow"),
     ("LLMs", r"\bllms?\b|large language model"), ("Salesforce", r"salesforce"), ("Snowflake", r"snowflake"),
     ("Git", r"\bgit\b"), ("CI/CD", r"ci/cd|continuous integration"),
+    ("HTML/CSS", r"\bhtml5?\b|\bcss3?\b"), ("Tailwind CSS", r"tailwind"), ("Figma", r"figma"),
+    ("Spring", r"spring boot|\bspring\b(?= framework| mvc| boot|,)"), ("Django", r"django"), ("Flask", r"\bflask\b"),
+    ("FastAPI", r"fastapi"), ("Express", r"express\.?js|\bexpress\b(?= framework|,| and node)"),
+    ("Redis", r"\bredis\b"), ("MySQL", r"mysql"), ("NoSQL", r"nosql|dynamodb|cassandra"),
+    ("Supabase", r"supabase"), ("Firebase", r"firebase"), ("Vercel", r"vercel"),
+    ("Jest", r"\bjest\b"), ("Cypress", r"cypress"), ("Playwright", r"playwright"), ("Selenium", r"selenium"),
+    ("Airflow", r"airflow"), ("dbt", r"\bdbt\b"), ("Databricks", r"databricks"), ("BigQuery", r"bigquery"),
+    ("Looker", r"looker"), ("R", r"\bR\b(?=\s*(,|/|and\b|programming|\(|studio))"),
+    ("Statistics", r"statistic"), ("Machine Learning", r"machine learning|\bml\b"),
+    ("Agile/Scrum", r"\bagile\b|\bscrum\b"), ("Jira", r"\bjira\b"), ("Expo", r"\bexpo\b(?= go|,| sdk)"),
 ]
-STACK_RE = [(label, re.compile(rx, re.I)) for label, rx in STACK]
+STACK_RE = [(label, re.compile(rx, 0 if label == "R" else re.I)) for label, rx in STACK]
 
 
 _EMOJI = re.compile(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]+")
@@ -521,7 +531,7 @@ def summarize(desc: str, company: str) -> dict:
         l for (h, items) in sections if kind(h) not in ("pref", "benefit", "about") for l in items)
     pay = PAY_RE.search(full)
     pay_s = pay.group(0).strip() if pay and re.search(r"\d{2}", pay.group(0)) else ""
-    stack = [label for label, rx in STACK_RE if rx.search(full)][:8]
+    stack = [label for label, rx in STACK_RE if rx.search(full)][:16]
     # prefer requirement bullets that say something concrete
     reqs.sort(key=lambda r: 0 if re.search(r"year|degree|experience|proficien|knowledge of", r, re.I) else 1)
     return {

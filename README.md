@@ -23,6 +23,10 @@ your resume skills, entry-level signals, full-time, in-person and Minnesota.
 - **📄 Summary** on each job, read from the full posting: what the role is, what you'd do, what
   they want, pay, tech stack, and required years — plus a **company summary** (the posting's
   "About us", else Wikipedia)
+- **📄 My resumes** (toolbar): drag & drop your resume PDFs into the dashboard. They're read
+  **in your browser** and only the list of skills found is kept there — never uploaded, never
+  committed. Each job then shows a **📄 best resume · 6/8** chip (how many of the posting's skills
+  it covers) and, in its Summary, how every resume compares plus the skills none of them mention.
 - **🧠 LeetCode prep** on each job: what the interview usually tests for that role (and company,
   where there's a well-known pattern) plus 6 problems chosen **for that job** — from ~175 problems
   in 20 topic pools, weighted by what the posting emphasizes (routing/logistics → graphs,
