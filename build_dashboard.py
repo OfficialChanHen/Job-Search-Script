@@ -391,6 +391,24 @@ button, input, select { font: inherit; }
 .hero .summary { color: var(--ink-2); font-size: 15px; margin-top: 8px; }
 .hero .summary strong { color: var(--ink-1); font-weight: 600; }
 .hero .sub { color: var(--ink-3); font-size: 12.5px; margin-top: 10px; }
+/* my links: one tap copies the address, the arrow opens it */
+.my-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 14px; }
+.my-link {
+  display: flex; min-width: 0; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface-1); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.my-link button {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px;
+  background: transparent; border: 0; cursor: pointer; font-size: 13px; color: var(--ink-1); font-weight: 600; text-align: left;
+}
+.my-link button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); font-weight: 400; font-size: 12px; }
+.my-link button:hover { background: var(--chip-bg); color: var(--series-1-ink); }
+.my-link button.copied { color: var(--good); }
+.my-link a {
+  display: flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--border);
+  color: var(--ink-3); text-decoration: none; font-size: 13px;
+}
+.my-link a:hover { background: var(--chip-bg); color: var(--series-1-ink); }
 
 /* ── stat tiles ─────────────────────────────────────────── */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap: 10px; margin: 16px 0; }
@@ -764,6 +782,11 @@ button, input, select { font: inherit; }
   .apply-btn { justify-content: center; order: 3; }
   .prep { grid-column: 1; }
 }
+@media (max-width: 640px) {
+  .my-links { grid-template-columns: 1fr 1fr; }
+  .my-link button, .my-link a { min-height: 44px; }
+  .my-link button span { display: none; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -774,6 +797,7 @@ button, input, select { font: inherit; }
     <h1>Entry-level SWE &amp; tech roles</h1>
     <div class="summary" id="summary"></div>
     <div class="sub">Updated __GENERATED__ · latest scrape __LATEST_DAY__ · US only · ranked by skill match, full-time, in-person</div>
+    <div class="my-links" id="myLinks" aria-label="My links"></div>
   </header>
     <section class="hud" id="hud" aria-label="Job hunt progress">
       <div class="hud-player">
@@ -1149,6 +1173,29 @@ function copyRow(id) {
     })]).then(done, () => fallbackCopy(tsv, done));
   } else fallbackCopy(tsv, done);
 }
+/* ── my links, for pasting into applications (same addresses as the resumes) ── */
+const MY_LINKS = [
+  ["LinkedIn", "https://linkedin.com/in/chan-hen-13727b233"],
+  ["GitHub", "https://github.com/OfficialChanHen"],
+  ["Portfolio", "https://chanhen.space"],
+  ["Hourelle", "https://hourelle.com"],
+];
+function renderMyLinks() {
+  const bare = (u) => u.replace(/^https?:\/\//, "");
+  const box = document.getElementById("myLinks");
+  box.innerHTML = MY_LINKS.map(([name, url], i) =>
+    `<span class="my-link"><button type="button" data-i="${i}" title="Copy ${url}">${name} <span>${bare(url)}</span></button>` +
+    `<a href="${url}" target="_blank" rel="noopener" title="Open ${name}" aria-label="Open ${name}">↗</a></span>`).join("");
+  box.onclick = (e) => {
+    const b = e.target.closest("button[data-i]");
+    if (!b) return;
+    const [name, url] = MY_LINKS[+b.dataset.i];
+    copyText(url, `📋 Copied your ${name} link`);
+    b.classList.add("copied"); clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove("copied"), 1400);
+  };
+}
+renderMyLinks();
+
 function fallbackCopy(text, done) {
   const ta = document.createElement("textarea");
   ta.value = text; document.body.append(ta); ta.select();
