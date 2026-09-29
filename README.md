@@ -28,7 +28,15 @@ Location isn't ranked — anywhere in the US counts the same.
   and searched on the company's Greenhouse / Lever / Ashby / Workday / SmartRecruiters board), with a
   small "via LinkedIn" link underneath. When no direct posting is found: **🔎 Find on company site**
   searches for that exact title on the company's career site.
-- Tabs: **New today / All / Direct link / In-person / Hybrid / Remote / Entry-level / SWE / Tech-adjacent / Saved / Applied / Hidden**
+- **🏪 Local part-time** tab: part-time jobs around Shakopee at **tech-related employers** — Best Buy /
+  Geek Squad, Apple, Micro Center, Verizon / T-Mobile / AT&T / Xfinity, GameStop, Amazon, Seagate, … —
+  where the role itself can be anything (sales associate, Apple Specialist, warehouse), plus
+  tech-flavoured part-time roles anywhere nearby. No hard distance cutoff: each job shows the drive
+  from Shakopee (miles, gas + wear per shift, round-trip minutes) and, when pay is listed, **$/hr after
+  driving** = (pay × 4-hr shift − driving cost) ÷ (4 hrs + drive time). The tab is sorted by that;
+  jobs that drop under ~$11/hr after driving (or are 45+ miles away) are left out. Assumptions live at
+  the top of `local_parttime.py` (cost per mile, shift length, average speed).
+- Tabs: **New today / All / Direct link / Local part-time / In-person / Hybrid / Remote / Entry-level / SWE / Tech-adjacent / Saved / Applied / Hidden**
 - Filters: **job type** (defaults to Full-time), **role** (SWE, Frontend, Data/BI, Solutions/FDE, QA, Cloud, IT…), source, sort
 - Every card shows **Full-time / Contract / Part-time**, work mode, role category, stated experience,
   and a **⚠ check grad window** flag on class-of-2026/2027 new-grad postings

@@ -254,6 +254,8 @@ CATEGORY_PREP: dict[str, tuple[bool, str, list[str]]] = {
                 ["sql", "sql", "sql"]),
     "it_support": (False, "No LeetCode — troubleshooting scenarios (networking, AD, tickets) and customer-service behavioral questions",
                    []),
+    "parttime": (False, "No coding — a short behavioral interview: your availability, a customer-service scenario or two, "
+                        "and why you like their products (knowing the tech is a real plus here)", []),
 }
 
 # (company regex, note, company-specific problems) — commonly reported early-career loops
@@ -312,8 +314,9 @@ def _seed(s: str) -> int:
     return int(hashlib.md5((s or "").encode()).hexdigest()[:8], 16)
 
 
-def prep_for(title: str, company: str = "", topics: list[str] | None = None, seed: str = "") -> dict:
-    cat = role_category(title) or "swe"
+def prep_for(title: str, company: str = "", topics: list[str] | None = None, seed: str = "",
+             category: str = "") -> dict:
+    cat = category or role_category(title) or "swe"
     coding, focus, plan = CATEGORY_PREP.get(cat, CATEGORY_PREP["swe"])
     rot = _seed(seed or f"{title}|{company}")
     picks: list[int] = []

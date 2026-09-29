@@ -31,6 +31,7 @@ from pathlib import Path
 from direct_links import DIRECT_SOURCES, clean_url, is_direct
 from enrich import COMPANY_FILE, ENRICH_FILE, STACK, company_key, is_too_experienced
 from interview_prep import prep_for, prep_text
+from local_parttime import WORTH_IT_HOURLY, commute
 from job_rules import (
     CATEGORY_LABEL, SWE_CATEGORIES, infer_job_type, is_target_title,
     is_us_location, role_category, url_key,
@@ -121,8 +122,8 @@ COMPANIES = _load_json(COMPANY_FILE)    # per company: summary + source
 USED_COMPANIES: dict[str, dict] = {}    # only the ones shipped in the page
 
 
-def _prep_id(title: str, company: str, topics: list | None = None, seed: str = "") -> int:
-    prep = prep_for(title, company, topics=topics, seed=seed)
+def _prep_id(title: str, company: str, topics: list | None = None, seed: str = "", category: str = "") -> int:
+    prep = prep_for(title, company, topics=topics, seed=seed, category=category)
     key = json.dumps(prep, sort_keys=True)
     if key not in _PREP_INDEX:
         _PREP_INDEX[key] = len(PREPS)
@@ -132,7 +133,16 @@ def _prep_id(title: str, company: str, topics: list | None = None, seed: str = "
 
 def keep_row(row: dict) -> bool:
     """Apply today's rules to a historical CSV row."""
-    if row.get("type", "job") != "job" or row.get("source") in DROPPED_SOURCES:
+    if row.get("source") in DROPPED_SOURCES:
+        return False
+    if row.get("type") == "parttime":
+        # local part-time has its own rules: really part-time, and worth the drive
+        rec = ENRICH.get(row.get("id", "")) or {}
+        if rec.get("emp") and "part" not in rec["emp"].lower():
+            return False
+        c = commute(row.get("location", ""), rec.get("pay") or row.get("tags", ""))
+        return not (c.get("eff") is not None and c["eff"] < WORTH_IT_HOURLY * 0.85)
+    if row.get("type", "job") != "job":
         return False
     title = row.get("title", "")
     if not is_target_title(title) or row.get("job_type") == "Internship":
@@ -164,6 +174,7 @@ def classify_and_score(row: dict) -> dict:
             claimed.add(label)
 
     rec = ENRICH.get(row.get("id", "")) or {}
+    local_pt = row.get("type") == "parttime"
     years = rec.get("y")
     exp = ("0 yrs" if years == 0 else f"{years} yr" if years is not None else "") or row.get("experience", "")
     junior = bool(JUNIOR_RE.search(title)) or (years is not None and years <= 1) or row.get("experience", "") in (
@@ -171,7 +182,7 @@ def classify_and_score(row: dict) -> dict:
     job_type = row.get("job_type") or infer_job_type(
         "", title, row.get("tags", ""),
         default="Full-time" if row.get("source") in FULLTIME_SOURCES else "")
-    category = row.get("category") or role_category(title) or "swe"
+    category = "parttime" if row.get("type") == "parttime" else (row.get("category") or role_category(title) or "swe")
 
     # Work mode: trust the scraper's column when present, else derive from text
     mode = row.get("work_mode", "") or ""
@@ -210,6 +221,10 @@ def classify_and_score(row: dict) -> dict:
     direct = clean_url(url) if (row.get("source") in DIRECT_SOURCES or is_direct(url)) else rec.get("du", "")
     if direct:
         score += 1
+    drive = commute(loc, rec.get("pay") or row.get("tags", "")) if local_pt else {}
+    if local_pt:
+        # rank the local tab by pay after driving (known pay first), then by distance
+        score = round(drive["eff"]) if drive.get("eff") else max(0, 12 - round(drive.get("mi", 25) / 5))
 
     return {
         "id": row.get("id", ""),
@@ -228,11 +243,13 @@ def classify_and_score(row: dict) -> dict:
         "mode": mode,
         "jobType": job_type,
         "cat": category,
-        "catLabel": CATEGORY_LABEL.get(category, "SWE"),
-        "swe": category in SWE_CATEGORIES,
+        "catLabel": "Local part-time" if local_pt else CATEGORY_LABEL.get(category, "SWE"),
+        "swe": category in SWE_CATEGORIES and not local_pt,
         "exp": exp,
         "gradWindow": bool(GRAD_WINDOW_RE.search(title)),
-        "prep": _prep_id(title, row.get("company", ""), rec.get("tp"), row.get("id", "")),
+        "prep": _prep_id(title, row.get("company", ""), rec.get("tp"), row.get("id", ""),
+                         "parttime" if local_pt else ""),
+        **({"drive": drive} if drive else {}),
         "gone": rec.get("st") == "gone",
         **({"direct": direct} if direct else {}),
         **({"sm": summary} if summary else {}),
@@ -1063,6 +1080,7 @@ const TABS = [
   ["new", "🆕 New today"],
   ["all", "All jobs"],
   ["direct", "🔗 Direct link"],
+  ["parttime", "🏪 Local part-time"],
   ["onsite", "🏢 In-person"],
   ["hybrid", "🔀 Hybrid"],
   ["remote", "🌐 Remote"],
@@ -1081,6 +1099,9 @@ function matchesTab(j, k) {
   if (s === "hidden") return false;
   // closed postings only stay visible where you're tracking them
   if (j.closed && k !== "saved" && k !== "applied") return false;
+  // local part-time jobs live in their own tab (and in Saved / Applied)
+  if (k === "parttime") return j.type === "parttime";
+  if (j.type === "parttime" && k !== "saved" && k !== "applied") return false;
   switch (k) {
     case "new":     return j.date === LATEST;
     case "direct":  return !!j.direct;
@@ -1100,7 +1121,7 @@ function passesFilters(j) {
   const q = query.toLowerCase();
   return (!source || j.source === source) &&
     (!cat || j.cat === cat) &&
-    (!jobType || (jobType === "?" ? !j.jobType : j.jobType === jobType)) &&
+    (!jobType || tab === "parttime" || j.type === "parttime" || (jobType === "?" ? !j.jobType : j.jobType === jobType)) &&
     (!q || (j.title + " " + j.company + " " + j.location + " " + j.catLabel + " " + j.chips.join(" ")).toLowerCase().includes(q));
 }
 function filtered() {
@@ -1142,6 +1163,7 @@ function cardBadges(j) {
     j.reposts >= 3 ? `<span class="chip flag-warn" title="Same title, company and location posted on ${j.reposts} different days — high-volume hiring, or an evergreen/ghost listing. Worth a referral before applying.">🔁 Posted ${j.reposts}×</span>` : "",
     j.stale ? '<span class="chip flag-src" title="Found 30+ days ago and this source can\'t be re-checked — may be filled">📅 30+ days old</span>' : "",
     (() => { const r = sheetRowFor(j.url); return r && r.status ? '<span class="chip flag-sheet">📗 ' + esc(r.status) + "</span>" : ""; })(),
+    driveChips(j),
     fitChip(j),
     j.gradWindow ? '<span class="chip flag-warn" title="New-grad posting — check the required graduation window; many also accept grads within 12–24 months">⚠ check grad window</span>' : "",
     ...j.chips.map(c => '<span class="chip">' + esc(c) + "</span>"),
@@ -1275,7 +1297,7 @@ function renderTiles() {
     `<strong class="num">${count("direct")}</strong> with a direct company link · ` +
     `<strong class="num">${count("applied")}</strong> applied`;
   const t = [["all", "Open jobs"], ["new", "New today"], ["direct", "Direct link"], ["onsite", "In-person"],
-             ["remote", "Remote"], ["saved", "Saved"], ["applied", "Applied"]];
+             ["remote", "Remote"], ["parttime", "Local part-time"], ["saved", "Saved"], ["applied", "Applied"]];
   document.getElementById("tiles").innerHTML = t.map(([k, l]) =>
     `<button class="tile ${tab === k ? "active" : ""}" onclick="goTab('${k}')"><div class="l">${l}</div><div class="v">${count(k)}</div></button>`
   ).join("");
@@ -2183,6 +2205,20 @@ setInterval(renderPace, 60000);           // "last hour" and pace age with the c
                              { rootMargin: "600px" }).observe(more);
   }
 })();
+
+
+/* ── 🏪 local part-time: commute + pay after driving ───────── */
+function driveChips(j) {
+  const d = j.drive;
+  if (!d) return "";
+  const out = [`<span class="chip flag-src" title="From Shakopee: ~${d.mi} road miles each way, ~${d.min} min round trip, ~$${d.cost.toFixed(2)} gas + wear per shift">🚗 ${Math.round(d.mi)} mi · $${d.cost.toFixed(2)}/shift · ${d.min} min RT</span>`];
+  if (d.eff != null) {
+    out.push(`<span class="chip ${d.ok ? "type-ft" : "flag-warn"}" title="Pays $${d.pay.toFixed(2)}/hr. Over a ${4}-hour shift, after gas and counting drive time: $${d.eff.toFixed(2)}/hr">💵 $${d.eff.toFixed(2)}/hr after driving${d.ok ? "" : " · borderline"}</span>`);
+  } else {
+    out.push('<span class="chip flag-src" title="The posting doesn\'t list pay — check it before driving far">💵 pay not listed</span>');
+  }
+  return out.join("");
+}
 
 refreshSyncUI();
 renderChart();

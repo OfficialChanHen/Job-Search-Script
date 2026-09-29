@@ -514,7 +514,7 @@ button, input, select { font: inherit; }
     <div class="eyebrow">Job Hunt · Chan Hen</div>
     <h1>Entry-level SWE &amp; tech roles</h1>
     <div class="summary" id="summary"></div>
-    <div class="sub">Updated 2026-09-29 15:26 UTC · latest scrape 2026-09-28 · US only · ranked by skill match, full-time, in-person</div>
+    <div class="sub">Updated 2026-09-29 15:40 UTC · latest scrape 2026-09-28 · US only · ranked by skill match, full-time, in-person</div>
   </header>
     <section class="hud" id="hud" aria-label="Job hunt progress">
       <div class="hud-player">
@@ -729,6 +729,7 @@ const TABS = [
   ["new", "🆕 New today"],
   ["all", "All jobs"],
   ["direct", "🔗 Direct link"],
+  ["parttime", "🏪 Local part-time"],
   ["onsite", "🏢 In-person"],
   ["hybrid", "🔀 Hybrid"],
   ["remote", "🌐 Remote"],
@@ -747,6 +748,9 @@ function matchesTab(j, k) {
   if (s === "hidden") return false;
   // closed postings only stay visible where you're tracking them
   if (j.closed && k !== "saved" && k !== "applied") return false;
+  // local part-time jobs live in their own tab (and in Saved / Applied)
+  if (k === "parttime") return j.type === "parttime";
+  if (j.type === "parttime" && k !== "saved" && k !== "applied") return false;
   switch (k) {
     case "new":     return j.date === LATEST;
     case "direct":  return !!j.direct;
@@ -766,7 +770,7 @@ function passesFilters(j) {
   const q = query.toLowerCase();
   return (!source || j.source === source) &&
     (!cat || j.cat === cat) &&
-    (!jobType || (jobType === "?" ? !j.jobType : j.jobType === jobType)) &&
+    (!jobType || tab === "parttime" || j.type === "parttime" || (jobType === "?" ? !j.jobType : j.jobType === jobType)) &&
     (!q || (j.title + " " + j.company + " " + j.location + " " + j.catLabel + " " + j.chips.join(" ")).toLowerCase().includes(q));
 }
 function filtered() {
@@ -808,6 +812,7 @@ function cardBadges(j) {
     j.reposts >= 3 ? `<span class="chip flag-warn" title="Same title, company and location posted on ${j.reposts} different days — high-volume hiring, or an evergreen/ghost listing. Worth a referral before applying.">🔁 Posted ${j.reposts}×</span>` : "",
     j.stale ? '<span class="chip flag-src" title="Found 30+ days ago and this source can\'t be re-checked — may be filled">📅 30+ days old</span>' : "",
     (() => { const r = sheetRowFor(j.url); return r && r.status ? '<span class="chip flag-sheet">📗 ' + esc(r.status) + "</span>" : ""; })(),
+    driveChips(j),
     fitChip(j),
     j.gradWindow ? '<span class="chip flag-warn" title="New-grad posting — check the required graduation window; many also accept grads within 12–24 months">⚠ check grad window</span>' : "",
     ...j.chips.map(c => '<span class="chip">' + esc(c) + "</span>"),
@@ -941,7 +946,7 @@ function renderTiles() {
     `<strong class="num">${count("direct")}</strong> with a direct company link · ` +
     `<strong class="num">${count("applied")}</strong> applied`;
   const t = [["all", "Open jobs"], ["new", "New today"], ["direct", "Direct link"], ["onsite", "In-person"],
-             ["remote", "Remote"], ["saved", "Saved"], ["applied", "Applied"]];
+             ["remote", "Remote"], ["parttime", "Local part-time"], ["saved", "Saved"], ["applied", "Applied"]];
   document.getElementById("tiles").innerHTML = t.map(([k, l]) =>
     `<button class="tile ${tab === k ? "active" : ""}" onclick="goTab('${k}')"><div class="l">${l}</div><div class="v">${count(k)}</div></button>`
   ).join("");
@@ -1849,6 +1854,20 @@ setInterval(renderPace, 60000);           // "last hour" and pace age with the c
                              { rootMargin: "600px" }).observe(more);
   }
 })();
+
+
+/* ── 🏪 local part-time: commute + pay after driving ───────── */
+function driveChips(j) {
+  const d = j.drive;
+  if (!d) return "";
+  const out = [`<span class="chip flag-src" title="From Shakopee: ~${d.mi} road miles each way, ~${d.min} min round trip, ~$${d.cost.toFixed(2)} gas + wear per shift">🚗 ${Math.round(d.mi)} mi · $${d.cost.toFixed(2)}/shift · ${d.min} min RT</span>`];
+  if (d.eff != null) {
+    out.push(`<span class="chip ${d.ok ? "type-ft" : "flag-warn"}" title="Pays $${d.pay.toFixed(2)}/hr. Over a ${4}-hour shift, after gas and counting drive time: $${d.eff.toFixed(2)}/hr">💵 $${d.eff.toFixed(2)}/hr after driving${d.ok ? "" : " · borderline"}</span>`);
+  } else {
+    out.push('<span class="chip flag-src" title="The posting doesn\'t list pay — check it before driving far">💵 pay not listed</span>');
+  }
+  return out.join("");
+}
 
 refreshSyncUI();
 renderChart();

@@ -48,8 +48,9 @@ import requests
 from bs4 import BeautifulSoup
 
 from enrich import enrich_rows, is_too_experienced
+from local_parttime import LINKEDIN_QUERIES as LOCAL_QUERIES, MAX_MILES, drive_miles, is_tech_related
 from job_rules import (
-    MAX_YEARS, STRICT_MAX_YEARS, classify_work_mode, experience_label, html_to_text,
+    MAX_YEARS, STRICT_MAX_YEARS, classify_work_mode, is_too_senior, experience_label, html_to_text,
     infer_job_type, is_junior_title, is_target_title, is_us_location,
     max_years_required, min_years_required, role_category, url_key,
 )
@@ -432,6 +433,107 @@ def fetch_linkedin() -> list[dict]:
         time.sleep(1.5)
 
     log.info(f"  ✓ LinkedIn → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: local part-time near Shakopee (tech-related employers, any role)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_local_parttime() -> list[dict]:
+    """
+    Part-time jobs within ~45 road miles of Shakopee, MN at tech-related
+    employers (Best Buy, Apple, carriers, Micro Center, Amazon, Seagate…) or
+    tech-flavoured roles anywhere. LinkedIn (part-time filter, past week)
+    + Adzuna when its keys are set. Rows are type "parttime".
+    """
+    log.info("🔍 Local part-time near Shakopee ...")
+    jobs: list[dict] = []
+    seen_urls: set[str] = set()
+
+    def keep(title, company, location, url, posted, source, pay_text=""):
+        if not url or url in seen_urls or not is_tech_related(company, title):
+            return
+        # LinkedIn's part-time filter leaks full-time senior roles ("VP, General Counsel")
+        if is_too_senior(title) or re.search(r"\bleader\b|counsel|attorney|\bhead\b", title, re.I):
+            return
+        miles = drive_miles(location)
+        if miles is not None and miles > MAX_MILES:
+            return
+        if miles is None and not re.search(r"\bMN\b|minnesota", location or "", re.I):
+            return
+        seen_urls.add(url)
+        jobs.append(entry(source=source, kind="parttime", title=title, company=company, location=location,
+                          url=url, posted=posted, job_type="Part-time", tags=pay_text))
+
+    # LinkedIn's logged-out search ignores its part-time filter, so "part time" goes in the
+    # keywords; each posting's own "Employment type" is checked during enrichment
+    base = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+    for kw in LOCAL_QUERIES:
+        params = {"keywords": f"{kw} part time", "location": "Shakopee, Minnesota, United States", "distance": MAX_MILES,
+                  "f_JT": "P", "f_TPR": "r604800", "start": 0}
+        try:
+            resp = SESSION.get(base, params=params, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code == 429:
+            log.warning("    LinkedIn rate-limited (429) — stopping local search")
+            break
+        if resp.status_code != 200:
+            continue
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for card in soup.select("div.base-search-card"):
+            t = card.select_one(".base-search-card__title")
+            c = card.select_one(".base-search-card__subtitle")
+            l = card.select_one(".job-search-card__location")
+            a = card.select_one("a.base-card__full-link")
+            tm = card.select_one("time")
+            if t and a:
+                keep(t.get_text(strip=True), c.get_text(strip=True) if c else "", l.get_text(strip=True) if l else "",
+                     str(a.get("href", "")).split("?")[0], str(tm.get("datetime", "")) if tm else "", "LinkedIn")
+        time.sleep(1.5)
+
+    if ADZUNA_APP_ID and ADZUNA_APP_KEY:
+        for kw in ["best buy", "apple store", "verizon", "t-mobile", "micro center", "electronics", "computer repair"]:
+            resp = get("https://api.adzuna.com/v1/api/jobs/us/search/1", params={
+                "app_id": ADZUNA_APP_ID, "app_key": ADZUNA_APP_KEY, "what": kw, "where": "Shakopee, MN",
+                "distance": int(MAX_MILES * 1.6), "part_time": 1, "max_days_old": 7, "results_per_page": 50})
+            if resp is None:
+                continue
+            try:
+                items = resp.json().get("results", [])
+            except ValueError:
+                continue
+            for it in items:
+                lo, hi = it.get("salary_min"), it.get("salary_max")
+                pay = f"${lo:,.2f}" + (f" - ${hi:,.2f}" if hi and hi != lo else "") if lo else ""
+                keep(BeautifulSoup(it.get("title", ""), "html.parser").get_text(),
+                     (it.get("company") or {}).get("display_name", ""),
+                     (it.get("location") or {}).get("display_name", ""), it.get("redirect_url", ""),
+                     (it.get("created") or "")[:10], "Adzuna", pay)
+            time.sleep(0.5)
+
+    # JSearch (Google for Jobs: Indeed, ZipRecruiter, …) filters part-time for real — one query/day
+    if JSEARCH_KEY:
+        for ep in ("https://jsearch.p.rapidapi.com/search-v2", "https://jsearch.p.rapidapi.com/search"):
+            resp = get(ep, headers={"X-RapidAPI-Key": JSEARCH_KEY, "X-RapidAPI-Host": "jsearch.p.rapidapi.com"},
+                       params={"query": "part time electronics technology retail sales near Shakopee, MN",
+                               "country": "us", "date_posted": "week", "employment_types": "PARTTIME"}, timeout=30)
+            if resp is None:
+                continue
+            try:
+                data = resp.json().get("data", [])
+            except ValueError:
+                break
+            items = data if isinstance(data, list) else (data.get("jobs") or [])
+            for it in items:
+                loc = ", ".join(x for x in (it.get("job_city"), it.get("job_state")) if x)
+                lo, hi = it.get("job_min_salary"), it.get("job_max_salary")
+                pay = (f"${lo:,.2f}" + (f" - ${hi:,.2f}" if hi and hi != lo else "")) if lo else ""
+                keep(it.get("job_title", ""), it.get("employer_name", ""), loc, it.get("job_apply_link", ""),
+                     (it.get("job_posted_at_datetime_utc") or "")[:10], f"JSearch/{it.get('job_publisher', '')}".rstrip("/"), pay)
+            break
+
+    log.info(f"  ✓ Local part-time → {len(jobs)} jobs")
     return jobs
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1578,6 +1680,7 @@ def print_summary(rows: list[dict]) -> None:
 
 FETCHERS = [
     fetch_linkedin,
+    fetch_local_parttime,
     fetch_dice,
     fetch_himalayas,
     fetch_hn_hiring,
@@ -1623,7 +1726,8 @@ def main() -> None:
 
     # ── Final guard: every source must satisfy the same rules ──────────────
     all_raw = [r for r in all_raw
-               if r.get("job_type") != "Internship" and is_target_title(r["title"])]
+               if r.get("type") == "parttime"          # local part-time: its own rules
+               or (r.get("job_type") != "Internship" and is_target_title(r["title"]))]
 
     # ── Deduplicate against seen + within today's batch ────────────────────
     new_rows:   list[dict] = []
@@ -1649,7 +1753,9 @@ def main() -> None:
     if new_rows:
         cache = enrich_rows(new_rows, budget_s=float(os.getenv("ENRICH_BUDGET", "1200")), log=log.info)
         before = len(new_rows)
-        new_rows = [r for r in new_rows if not is_too_experienced(cache.get(r["id"]))]
+        new_rows = [r for r in new_rows
+                    if (r.get("type") == "parttime" and "full" not in (cache.get(r["id"]) or {}).get("emp", "").lower())
+                    or (r.get("type") != "parttime" and not is_too_experienced(cache.get(r["id"])))]
         log.info(f"Experience filter: dropped {before - len(new_rows)} postings asking for 2+ years "
                  f"(or LinkedIn Mid-Senior+) once the full description was read")
 

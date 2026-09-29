@@ -127,14 +127,19 @@ def fetch_linkedin(url: str) -> dict:
         return {"st": "gone"}
     soup = BeautifulSoup(r.text, "html.parser")
     body = soup.select_one(".show-more-less-html__markup") or soup.select_one(".description__text")
-    level = ""
+    level = emp = ""
     for item in soup.select(".description__job-criteria-item"):
-        h = item.select_one("h3")
-        if h and "seniority" in h.get_text(strip=True).lower():
-            level = item.select_one("span").get_text(strip=True) if item.select_one("span") else ""
+        h, v = item.select_one("h3"), item.select_one("span")
+        if not (h and v):
+            continue
+        name = h.get_text(strip=True).lower()
+        if "seniority" in name:
+            level = v.get_text(strip=True)
+        elif "employment type" in name:
+            emp = v.get_text(strip=True)          # "Full-time" / "Part-time" / "Contract" …
     if soup.select_one(".closed-job") or "No longer accepting applications" in r.text:
         return {"st": "gone", "level": level}
-    return {"st": "ok" if body else "none", "desc": str(body) if body else "", "level": level}
+    return {"st": "ok" if body else "none", "desc": str(body) if body else "", "level": level, "emp": emp}
 
 
 def fetch_greenhouse(url: str) -> dict | None:
@@ -624,6 +629,8 @@ def _enrich_one(row: dict) -> tuple[str, dict]:
         rec["st"] = "ok"
     if meta.get("level"):
         rec["lvl"] = meta["level"]
+    if meta.get("emp"):
+        rec["emp"] = meta["emp"]
     if meta.get("months") is not None and rec.get("y") is None:
         rec["y"] = meta["months"] // 12
     if meta.get("org"):
@@ -717,9 +724,9 @@ def backlog_rows() -> list[dict]:
     for path in sorted(glob.glob(str(DATA_DIR / "jobs_*.csv")), reverse=True):
         with open(path, encoding="utf-8") as f:
             for r in csv.DictReader(f):
-                if r.get("id") in seen or r.get("source") in SKIP_SOURCES or r.get("type", "job") != "job":
+                if r.get("id") in seen or r.get("source") in SKIP_SOURCES or r.get("type", "job") not in ("job", "parttime"):
                     continue
-                if not is_target_title(r.get("title", "")):
+                if r.get("type") != "parttime" and not is_target_title(r.get("title", "")):
                     continue
                 seen.add(r["id"])
                 rows.append(r)
