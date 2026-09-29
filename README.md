@@ -14,9 +14,21 @@ in-person > hybrid > remote.
 
 Every run rebuilds `docs/index.html` — a single self-contained page with **all
 jobs ever collected** (history is re-filtered with today's rules), scored against
-your resume skills, entry-level signals, full-time, in-person and Minnesota.
+your resume skills, entry-level signals, full-time, in-person and whether there's a direct company link.
+Location isn't ranked — anywhere in the US counts the same.
 
-- Tabs: **New today / All / Minnesota / In-person / Hybrid / Remote / Entry-level / SWE / Tech-adjacent / Saved / Applied / Hidden**
+- **Sticky bar** (stays on screen while you scroll): your LinkedIn / GitHub / portfolio / Hourelle links
+  (tap to copy, ↗ to open), **✓ applied today · in the last hour · per hour · minutes each**, the tabs
+  (with counts) and the search + filters. Shortcuts: **/** search, **t** back to top; the list loads
+  more as you scroll and a ↑ button takes you back up.
+- **⏱ Pace panel** (click the applied-today pill): applications today, last hour, per hour, per minute,
+  average time per application, an hour-by-hour chart for today and a 7-day chart.
+- **🔗 Direct links:** **Apply ↗** goes to the posting on the company's own site whenever it can be
+  found — also for LinkedIn / Dice / Adzuna / Jobicy jobs (matched against ~23k direct ATS postings
+  and searched on the company's Greenhouse / Lever / Ashby / Workday / SmartRecruiters board), with a
+  small "via LinkedIn" link underneath. When no direct posting is found: **🔎 Find on company site**
+  searches for that exact title on the company's career site.
+- Tabs: **New today / All / Direct link / In-person / Hybrid / Remote / Entry-level / SWE / Tech-adjacent / Saved / Applied / Hidden**
 - Filters: **job type** (defaults to Full-time), **role** (SWE, Frontend, Data/BI, Solutions/FDE, QA, Cloud, IT…), source, sort
 - Every card shows **Full-time / Contract / Part-time**, work mode, role category, stated experience,
   and a **⚠ check grad window** flag on class-of-2026/2027 new-grad postings
@@ -54,7 +66,7 @@ Sheet columns: `Last Update | Company | Job | Location | Status | Application | 
 - **Ghost-job flags:** ⛔ *Closed* when a posting has disappeared from its company board (those are
   hidden except in Saved/Applied), 🔁 *Posted N×* when the same title/company/location keeps being
   re-posted, 📅 *30+ days old* when a listing can't be re-checked.
-- **Morning digest** (optional): the day's top 10 new matches — full-time and Minnesota first — plus
+- **Morning digest** (optional): the day's top 10 new matches — full-time and direct company links first — plus
   follow-ups due, pushed to your phone or inbox right after the daily run. Setup below.
 
 ### 🎮 The game layer
@@ -70,8 +82,8 @@ Job hunting, but with XP — so it's less of a grind:
 - **🎮 Quick Play:** one job at a time with its summary, keyboard-driven — **←** pass, **↑** save,
   **→** open & apply. After opening, it asks "did you submit?": **Enter** applied · **↑** save for
   later · **←** didn't apply, pass. Combos, confetti, and a job-search tip each round.
-  It plays whatever tab + filters you have selected, so pick *Minnesota* or *Full-time · SWE* first.
-- **🏆 20 badges** — First Blood, Local Legend, Touch Grass (in-person), Connector, Persistent,
+  It plays whatever tab + filters you have selected, so pick *Direct link* or *Full-time · SWE* first.
+- **🏆 20 badges** — First Blood, Straight to the Source (5 applications on company sites), Touch Grass (in-person), Connector, Persistent,
   Grinder, Spaced Out, Boss Battle (first interview), Offer!…
 
 Progress lives in your browser (same as Applied/Saved marks); applying through Quick Play still
@@ -132,14 +144,14 @@ Older jobs are re-checked a few hundred per day.
 | **Ashby** | ~26 boards (OpenAI, Ramp, Plaid, Snowflake, Cursor, …) | ❌ Free |
 | **Lever** | Palantir, Zoox | ❌ Free |
 | **SmartRecruiters** | ServiceNow, AbbVie | ❌ Free |
-| **Workday** | Twin Cities employers (Target, U.S. Bank, Medtronic, 3M, General Mills, Thomson Reuters, C.H. Robinson, Securian, Ameriprise, Xcel, …) + Capital One, Nvidia, Salesforce, Visa, … | ❌ Free |
+| **Workday** | Large employers (Target, U.S. Bank, Medtronic, 3M, General Mills, Thomson Reuters, C.H. Robinson, Securian, Ameriprise, Xcel, …) + Capital One, Nvidia, Salesforce, Visa, … | ❌ Free |
 | **RemoteOK / Remotive / WeWorkRemotely / Jobicy** | Remote boards — only US-restricted listings kept | ❌ Free |
 | **USAJobs** | Federal IT/CS/data jobs, GS-5–9, incl. Pathways Recent Graduates | ✅ Free signup |
 | **JSearch** | Google for Jobs → Indeed, Glassdoor, ZipRecruiter, … | ✅ Free RapidAPI tier |
 | **Adzuna** | Large job aggregator | ✅ Free signup |
 
 Not scraped (need a login — check them by hand): **Handshake** (the most important
-one for new grads), Wellfound, YC Work at a Startup, Built In Minnesota.
+one for new grads), Wellfound, YC Work at a Startup, Built In.
 Indeed is covered indirectly through JSearch once its key is added.
 
 ---

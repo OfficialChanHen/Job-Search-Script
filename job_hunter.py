@@ -97,8 +97,6 @@ SEARCH_TERMS = [
     "ai engineer",
 ]
 
-# Twin Cities searches (any work mode) — local roles get a dashboard boost
-TWIN_CITIES_TERMS = ["software", "developer", "data analyst", "IT analyst"]
 
 # ── Company career boards (public JSON APIs — no keys needed) ───────────────
 # All slugs verified live 2026-09-23.
@@ -387,7 +385,6 @@ def fetch_linkedin() -> list[dict]:
     seen_urls: set[str] = set()
     base = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
     searches = [(kw, "United States", start) for kw in SEARCH_TERMS for start in (0, 10)]
-    searches += [(kw, "Minneapolis, Minnesota, United States", 0) for kw in TWIN_CITIES_TERMS]
 
     for kw, loc, start in searches:
         params = {"keywords": kw, "location": loc, "f_E": "2", "f_JT": "F",

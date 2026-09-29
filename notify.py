@@ -39,8 +39,8 @@ def top_new_jobs() -> tuple[list[dict], int, str]:
     jobs = load_jobs()
     latest = max((j["date"] for j in jobs), default="")
     new = [j for j in jobs if j["date"] == latest and not j.get("closed")]
-    # full-time first, then Minnesota, then score (load_jobs already sorts by score)
-    new.sort(key=lambda j: (j["jobType"] != "Full-time", not j["local"], -j["score"]))
+    # full-time first, then direct company links, then score (load_jobs already sorts by score)
+    new.sort(key=lambda j: (j["jobType"] != "Full-time", not j.get("direct"), -j["score"]))
     return new[:TOP_N], len(new), latest
 
 
@@ -78,7 +78,7 @@ def _parse_date(v: str):
 
 def line(j: dict) -> str:
     tags = " ".join(filter(None, [
-        MODE.get(j["mode"], ""), "📍MN" if j["local"] else "",
+        MODE.get(j["mode"], ""),
         "" if j["jobType"] == "Full-time" else f"[{j['jobType'] or 'type?'}]",
     ]))
     return f"{j['title']} — {j['company']} · {j['location']} {tags}".strip()
@@ -86,8 +86,8 @@ def line(j: dict) -> str:
 
 def build_text(jobs, total, day, fus) -> tuple[str, str]:
     title = f"🎯 {total} new job{'s' if total != 1 else ''} · {day}"
-    parts = [f"Top {len(jobs)} (full-time & Minnesota first):"]
-    parts += [f"• {line(j)}\n  {j['url']}" for j in jobs]
+    parts = [f"Top {len(jobs)} (full-time first):"]
+    parts += [f"• {line(j)}\n  {j.get('direct') or j['url']}" for j in jobs]
     if fus:
         parts.append("\n📬 Follow up today (no reply yet):")
         parts += [f"• {r.get('company', '')} — {r.get('title', '')} ({r['age']} days)" for r in fus]
@@ -98,15 +98,15 @@ def build_text(jobs, total, day, fus) -> tuple[str, str]:
 def build_html(jobs, total, day, fus) -> str:
     e = html.escape
     rows = "".join(
-        f'<li style="margin:0 0 10px"><a href="{e(j["url"])}" style="color:#2a78d6;font-weight:600;text-decoration:none">'
+        f'<li style="margin:0 0 10px"><a href="{e(j.get("direct") or j["url"])}" style="color:#2a78d6;font-weight:600;text-decoration:none">'
         f'{e(j["title"])}</a><br><span style="color:#52514e">{e(j["company"])} · {e(j["location"])} '
-        f'{MODE.get(j["mode"], "")}{" · 📍 Minnesota" if j["local"] else ""}'
+        f'{MODE.get(j["mode"], "")}'
         f'{"" if j["jobType"] == "Full-time" else " · " + e(j["jobType"] or "type ?")}</span></li>'
         for j in jobs)
     fu = "".join(f"<li>{e(r.get('company', ''))} — {e(r.get('title', ''))} ({r['age']} days)</li>" for r in fus)
     return f"""<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:620px;color:#0b0b0b">
   <h2 style="margin:0 0 4px">🎯 {total} new job{'s' if total != 1 else ''} · {e(day)}</h2>
-  <p style="color:#898781;margin:0 0 14px">Top {len(jobs)} — full-time and Minnesota first</p>
+  <p style="color:#898781;margin:0 0 14px">Top {len(jobs)} — full-time first</p>
   <ul style="padding-left:18px">{rows}</ul>
   {f'<h3>📬 Follow up today</h3><ul>{fu}</ul>' if fu else ''}
   <p><a href="{e(DASHBOARD_URL)}" style="background:#2a78d6;color:#fff;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:600">🎮 Open dashboard</a></p>

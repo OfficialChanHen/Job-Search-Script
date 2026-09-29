@@ -143,7 +143,7 @@ _SOFT_SENIOR = re.compile(r"\b(senior|sr|lead|expert|specialist ii)\b", re.IGNOR
 # "Senior Associate" is a mid-level rung (consulting/finance), not a junior one
 _SENIOR_ASSOC = re.compile(r"\b(senior|sr\.?)\s+associate\b", re.IGNORECASE)
 # Level II+ ("Engineer II", "Developer 3", "L4") — typically 2+ years
-_LEVEL_UP = re.compile(r"\b(ii|iii|iv|v|2|3|4|l[4-9]|[ep][3-9]|ic[3-9])\b\s*($|[-–,(/|:])", re.IGNORECASE)
+_LEVEL_UP = re.compile(r"\b(ii|iii|iv|v|vi|[2-9]|l[4-9]|[ep][3-9]|ic[3-9])\b\s*($|[-–,(/|:])", re.IGNORECASE)
 # Level I ("Engineer I", "Software Engineer 1")
 _LEVEL_ONE = re.compile(r"\b(i|1)\b\s*($|[-–,(/|:])", re.IGNORECASE)
 

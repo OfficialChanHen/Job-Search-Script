@@ -28,6 +28,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from direct_links import DIRECT_SOURCES, clean_url, is_direct
 from enrich import COMPANY_FILE, ENRICH_FILE, STACK, company_key, is_too_experienced
 from interview_prep import prep_for, prep_text
 from job_rules import (
@@ -143,10 +144,6 @@ def keep_row(row: dict) -> bool:
     strict = row.get("source") in GLOBAL_REMOTE_SOURCES and not row.get("job_type")
     return is_us_location(loc, bare_remote_ok=not strict)
 
-MN_RE = re.compile(
-    r"\bMN\b|Minneapolis|St\.?\s?Paul|Saint Paul|Minnesota|Bloomington, MN|"
-    r"Eden Prairie|Shakopee|Eagan|Edina|Brooklyn Park", re.IGNORECASE)
-
 REMOTE_RE = re.compile(r"remote|anywhere|worldwide|global", re.IGNORECASE)
 
 
@@ -171,7 +168,6 @@ def classify_and_score(row: dict) -> dict:
     exp = ("0 yrs" if years == 0 else f"{years} yr" if years is not None else "") or row.get("experience", "")
     junior = bool(JUNIOR_RE.search(title)) or (years is not None and years <= 1) or row.get("experience", "") in (
         "0 yrs", "1+ yrs", "Entry-level", "New grad", "Recent grad", "Entry grade")
-    local = bool(MN_RE.search(loc))
     job_type = row.get("job_type") or infer_job_type(
         "", title, row.get("tags", ""),
         default="Full-time" if row.get("source") in FULLTIME_SOURCES else "")
@@ -188,10 +184,8 @@ def classify_and_score(row: dict) -> dict:
             mode = "onsite"
     remote = mode == "remote"
 
-    # Priority: in-person > hybrid > remote; Minnesota beats everything
+    # Priority: in-person > hybrid > remote (no location preference beyond the US)
     if junior:
-        score += 3
-    if local:
         score += 3
     score += {"onsite": 3, "hybrid": 2, "remote": 1}[mode]
     # Full-time is the main focus
@@ -210,6 +204,13 @@ def classify_and_score(row: dict) -> dict:
         USED_COMPANIES.setdefault(ck, {k: co[k] for k in ("s", "src", "u") if co.get(k)})
     summary = {k: rec[k] for k in ("sum", "do", "need", "pay", "stack") if rec.get(k)}
 
+    # the employer's own posting: the link itself if it already is one, else what
+    # direct_links.py found for board/aggregator jobs (LinkedIn, Dice, …)
+    url = row.get("url", "")
+    direct = clean_url(url) if (row.get("source") in DIRECT_SOURCES or is_direct(url)) else rec.get("du", "")
+    if direct:
+        score += 1
+
     return {
         "id": row.get("id", ""),
         "date": row.get("date_found", ""),
@@ -223,7 +224,6 @@ def classify_and_score(row: dict) -> dict:
         "score": score,
         "chips": chips[:6],
         "junior": junior,
-        "local": local,
         "remote": remote,
         "mode": mode,
         "jobType": job_type,
@@ -234,6 +234,7 @@ def classify_and_score(row: dict) -> dict:
         "gradWindow": bool(GRAD_WINDOW_RE.search(title)),
         "prep": _prep_id(title, row.get("company", ""), rec.get("tp"), row.get("id", "")),
         "gone": rec.get("st") == "gone",
+        **({"direct": direct} if direct else {}),
         **({"sm": summary} if summary else {}),
         **({"ck": ck} if ck in USED_COMPANIES else {}),
     }
@@ -410,6 +411,57 @@ button, input, select { font: inherit; }
 }
 .my-link a:hover { background: var(--chip-bg); color: var(--series-1-ink); }
 
+/* ── sticky bar: my links · today's pace · tabs · search ── */
+.stickybar {
+  position: sticky; top: 0; z-index: 30; margin: 16px -16px 10px; padding: 10px 16px 8px;
+  background: color-mix(in srgb, var(--plane) 88%, transparent); backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid transparent; transition: border-color .15s, box-shadow .15s;
+}
+.stickybar.stuck { border-bottom-color: var(--border); box-shadow: 0 6px 16px -12px rgba(0,0,0,.35); }
+.sb-top { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; min-width: 0; }
+.stickybar .my-links { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0; overflow-x: auto; scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
+.stickybar .my-links::-webkit-scrollbar { display: none; }
+.stickybar .my-link { flex: none; box-shadow: none; border-radius: 999px; }
+.stickybar .my-link button { min-height: 32px; padding: 0 12px; font-size: 12.5px; }
+.stickybar .my-link button span { display: none; }
+.stickybar .my-link a { padding: 0 10px; }
+.pace {
+  flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border-radius: 999px;
+  background: var(--surface-1); border: 1px solid var(--border); font-size: 12.5px; color: var(--ink-2); cursor: pointer;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pace b { color: var(--ink-1); font-size: 14px; }
+.pace .sep { color: var(--ink-3); }
+.pace:hover { border-color: var(--series-1); }
+.stickybar .tabs { margin-bottom: 8px; }
+.stickybar .controls { margin-bottom: 0; }
+.tab .n { font-size: 11px; opacity: .7; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.pace-panel { margin: 0 0 12px; }
+.hourbars { display: flex; align-items: flex-end; gap: 2px; height: 56px; border-bottom: 1px solid var(--baseline); margin-top: 8px; }
+.hourbars .bar { flex: 1; min-width: 3px; }
+.pace-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 6px; }
+.pace-kpis div { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.pace-kpis .l { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.pace-kpis .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#toTop {
+  position: fixed; right: 18px; bottom: 22px; z-index: 35; width: 44px; height: 44px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--ink-1); box-shadow: var(--shadow-md);
+  cursor: pointer; font-size: 18px; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+#toTop.show { opacity: 1; pointer-events: auto; }
+.apply-col { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.via { font-size: 11.5px; color: var(--ink-3); text-align: center; text-decoration: none; }
+.via:hover { color: var(--series-1-ink); text-decoration: underline; }
+.chip.flag-direct { background: var(--good-bg); color: var(--good); font-weight: 600; }
+@media (max-width: 640px) {
+  .stickybar { margin: 10px -16px 8px; padding: 8px 12px 6px; }
+  .stickybar .controls { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .stickybar .controls::-webkit-scrollbar { display: none; }
+  .stickybar .controls input[type=search] { flex: 0 0 200px; }
+  .pace .opt { display: none; }
+  .apply-col { order: 3; }
+}
+
 /* ── stat tiles ─────────────────────────────────────────── */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap: 10px; margin: 16px 0; }
 .tile {
@@ -460,7 +512,8 @@ button, input, select { font: inherit; }
   border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; font-size: 14px;
   box-shadow: var(--shadow-sm);
 }
-.controls input[type=search] { flex: 1 1 240px; }
+.controls input[type=search] { flex: 1 1 240px; min-width: 200px; }
+.controls select { flex: 0 1 auto; max-width: 180px; }
 .controls select:hover, .controls input:hover { border-color: var(--border-strong); }
 .bar-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0 12px; flex-wrap: wrap; }
 .count-note { color: var(--ink-3); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -505,7 +558,6 @@ button, input, select { font: inherit; }
   font-size: 11.5px; line-height: 1; padding: 5px 9px; border-radius: 999px;
   background: var(--chip-bg); color: var(--chip-ink); font-weight: 500;
 }
-.chip.flag-local { background: var(--good-bg); color: var(--good); font-weight: 600; }
 .chip.flag-src { background: transparent; box-shadow: inset 0 0 0 1px var(--border); color: var(--ink-2); }
 .chip.flag-new { background: var(--crit); color: #fff; font-weight: 700; letter-spacing: .04em; }
 .chip.type-ft { background: var(--good-bg); color: var(--good); font-weight: 600; }
@@ -797,7 +849,6 @@ button, input, select { font: inherit; }
     <h1>Entry-level SWE &amp; tech roles</h1>
     <div class="summary" id="summary"></div>
     <div class="sub">Updated __GENERATED__ · latest scrape __LATEST_DAY__ · US only · ranked by skill match, full-time, in-person</div>
-    <div class="my-links" id="myLinks" aria-label="My links"></div>
   </header>
     <section class="hud" id="hud" aria-label="Job hunt progress">
       <div class="hud-player">
@@ -832,10 +883,15 @@ button, input, select { font: inherit; }
     <div class="bar-axis" id="barAxis"></div>
   </div>
 
+  <div class="stickybar" id="stickybar">
+    <div class="sb-top">
+      <div class="my-links" id="myLinks" aria-label="My links (tap to copy)"></div>
+      <button class="pace" id="paceBtn" title="Applications today and your pace — click for the hourly chart"></button>
+    </div>
   <div class="tabs" id="tabs"></div>
 
   <div class="controls">
-    <input type="search" id="q" placeholder="Search title, company, location, skill…">
+    <input type="search" id="q" placeholder="Search title, company, location, skill…  ( / )">
     <select id="jobType" title="Job type">
       <option value="Full-time">Full-time</option>
       <option value="">All job types</option>
@@ -851,6 +907,8 @@ button, input, select { font: inherit; }
       <option value="date">Sort: Newest</option>
     </select>
   </div>
+  </div>
+  <div class="settings pace-panel" id="pacePanel" hidden></div>
 
   <div class="bar-row">
     <div class="count-note" id="countNote"></div>
@@ -893,6 +951,7 @@ button, input, select { font: inherit; }
   <button class="loadmore" id="loadMore" hidden>Show more</button>
 </div>
 <div id="toast"></div>
+<button id="toTop" title="Back to top (press t)" aria-label="Back to top">↑</button>
 <div class="qp" id="qp" hidden role="dialog" aria-modal="true" aria-label="Quick Play">
   <div class="qp-top"><span id="qpLeft"></span><span class="qp-combo" id="qpCombo"></span><button id="qpClose">✕ Esc</button></div>
   <div class="qp-card" id="qpCard"></div>
@@ -930,7 +989,8 @@ let sheetUrl = localStorage.getItem(LS_URL) || "";
 
 function setStatus(id, s, opts) {
   const prev = (statusMap[id] || {}).s || "";
-  if (s) statusMap[id] = { s, t: localDay() };
+  if (s) statusMap[id] = s === "applied" && prev === "applied" ? statusMap[id]
+                        : { s, t: localDay(), ...(s === "applied" ? { ts: Date.now() } : {}) };
   else delete statusMap[id];
   try { localStorage.setItem(LS_KEY, JSON.stringify(statusMap)); } catch (e) {}
   // Auto-fill the Google Sheet the first time a job becomes "Applied"
@@ -963,7 +1023,7 @@ function syncToSheet(job, opts) {
   const payload = {
     date: today(),
     company: job.company, title: job.title, location: job.location,
-    status: "Applied", url: job.url, id: job.id,
+    status: "Applied", url: job.direct || job.url, id: job.id,
     jobType: job.jobType || "",
     prep: job.prep !== undefined ? PREPS[job.prep].text : "",
   };
@@ -1002,7 +1062,7 @@ const openPrep = {};
 const TABS = [
   ["new", "🆕 New today"],
   ["all", "All jobs"],
-  ["local", "📍 Minnesota"],
+  ["direct", "🔗 Direct link"],
   ["onsite", "🏢 In-person"],
   ["hybrid", "🔀 Hybrid"],
   ["remote", "🌐 Remote"],
@@ -1014,15 +1074,16 @@ const TABS = [
   ["hidden", "🚫 Hidden"],
 ];
 
-function matchesTab(j) {
+function matchesTab(j, k) {
+  k = k || tab;
   const s = st(j.id);
-  if (tab === "hidden") return s === "hidden";
+  if (k === "hidden") return s === "hidden";
   if (s === "hidden") return false;
   // closed postings only stay visible where you're tracking them
-  if (j.closed && tab !== "saved" && tab !== "applied") return false;
-  switch (tab) {
+  if (j.closed && k !== "saved" && k !== "applied") return false;
+  switch (k) {
     case "new":     return j.date === LATEST;
-    case "local":   return j.local;
+    case "direct":  return !!j.direct;
     case "onsite":  return j.mode === "onsite";
     case "hybrid":  return j.mode === "hybrid";
     case "remote":  return j.mode === "remote";
@@ -1035,15 +1096,15 @@ function matchesTab(j) {
   }
 }
 
-function filtered() {
+function passesFilters(j) {
   const q = query.toLowerCase();
-  let rows = JOBS.filter(j =>
-    matchesTab(j) &&
-    (!source || j.source === source) &&
+  return (!source || j.source === source) &&
     (!cat || j.cat === cat) &&
     (!jobType || (jobType === "?" ? !j.jobType : j.jobType === jobType)) &&
-    (!q || (j.title + " " + j.company + " " + j.location + " " + j.catLabel + " " + j.chips.join(" ")).toLowerCase().includes(q))
-  );
+    (!q || (j.title + " " + j.company + " " + j.location + " " + j.catLabel + " " + j.chips.join(" ")).toLowerCase().includes(q));
+}
+function filtered() {
+  let rows = JOBS.filter(j => matchesTab(j) && passesFilters(j));
   if (sortBy === "date") rows.sort((a, b) => b.date.localeCompare(a.date) || b.score - a.score);
   else rows.sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
   return rows;
@@ -1055,6 +1116,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 function render() {
   renderTiles();
   renderTabs();
+  if (typeof renderPace === "function") renderPace();
   checkProgress();
   const rows = filtered();
   document.getElementById("countNote").textContent = "Showing " +
@@ -1071,7 +1133,7 @@ function cardBadges(j) {
   const modeBadge = { onsite: "🏢 In-person", hybrid: "🔀 Hybrid", remote: "🌐 Remote" }[j.mode] || "";
   return [
     j.date === LATEST ? '<span class="chip flag-new">NEW</span>' : "",
-    j.local ? '<span class="chip flag-local">📍 Minnesota</span>' : "",
+    j.direct && j.direct !== j.url ? '<span class="chip flag-direct" title="Found the posting on the company\'s own site">🔗 Company site</span>' : "",
     '<span class="chip ' + (j.jobType === "Full-time" ? "type-ft" : "type-other") + '">' + esc(j.jobType || "Type ?") + "</span>",
     modeBadge ? '<span class="chip flag-src">' + modeBadge + "</span>" : "",
     '<span class="chip flag-src">' + esc(j.catLabel) + "</span>",
@@ -1092,9 +1154,9 @@ function card(j) {
   const cls = (s === "applied" ? "job applied" : s === "saved" ? "job saved" : "job") + (j.closed ? " is-closed" : "");
   const badges = cardBadges(j);
   return `<div class="${cls}">
-    <div class="score ${j.score >= 10 ? "hot" : ""}" title="Match score: skills, entry-level, full-time, in-person, Minnesota">${j.score}<small>match</small></div>
+    <div class="score ${j.score >= 10 ? "hot" : ""}" title="Match score: skills, entry-level, full-time, in-person, direct company link">${j.score}<small>match</small></div>
     <div>
-      <h3><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></h3>
+      <h3><a href="${esc(j.direct || j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></h3>
       <div class="meta"><span class="co">${esc(j.company) || "—"}</span><span class="dot">·</span>${esc(j.location)}</div>
       <div class="badges">${badges}</div>
       <div class="actions">
@@ -1107,7 +1169,7 @@ function card(j) {
         <button onclick="setStatus('${j.id}','${s === "hidden" ? "" : "hidden"}')">${s === "hidden" ? "↩ Unhide" : "Hide"}</button>
       </div>
     </div>
-    <a class="apply-btn" href="${esc(j.url)}" target="_blank" rel="noopener">Apply ↗</a>
+    <div class="apply-col">${applyLinks(j)}</div>
     ${openSum[j.id] ? sumPanel(j) : ""}
     ${openPrep[j.id] ? prepPanel(PREPS[j.prep]) : ""}
     ${openRef[j.id] ? refPanel(j) : ""}
@@ -1155,7 +1217,7 @@ function today() {
   return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`;
 }
 function sheetRow(j, status, date) {
-  return [date || today(), j.company, j.title, j.location, status, j.url, j.jobType || "", PREPS[j.prep].text];
+  return [date || today(), j.company, j.title, j.location, status, j.direct || j.url, j.jobType || "", PREPS[j.prep].text];
 }
 function copyRow(id) {
   const j = JOBS.find(x => x.id === id);
@@ -1204,31 +1266,27 @@ function fallbackCopy(text, done) {
 }
 
 function renderTiles() {
-  const visible = JOBS.filter(j => st(j.id) !== "hidden");
-  const ft = visible.filter(j => j.jobType === "Full-time");
+  // same rules as the tabs (hidden + closed postings don't count), ignoring search/filters
+  const count = k => JOBS.reduce((c, j) => c + (matchesTab(j, k) ? 1 : 0), 0);
+  const open = JOBS.filter(j => matchesTab(j, "all"));
   document.getElementById("summary").innerHTML =
-    `<strong class="num">${visible.filter(j => j.date === LATEST).length}</strong> new today · ` +
-    `<strong class="num">${ft.length}</strong> full-time · ` +
-    `<strong class="num">${visible.filter(j => j.local).length}</strong> in Minnesota · ` +
-    `<strong class="num">${JOBS.filter(j => st(j.id) === "applied").length}</strong> applied`;
-  const t = [
-    ["all", visible.length, "Total jobs"],
-    ["new", visible.filter(j => j.date === LATEST).length, "New today"],
-    ["local", visible.filter(j => j.local).length, "Minnesota"],
-    ["onsite", visible.filter(j => j.mode === "onsite").length, "In-person"],
-    ["remote", visible.filter(j => j.mode === "remote").length, "Remote"],
-    ["saved", JOBS.filter(j => st(j.id) === "saved").length, "Saved"],
-    ["applied", JOBS.filter(j => st(j.id) === "applied").length, "Applied"],
-  ];
-  document.getElementById("tiles").innerHTML = t.map(([k, v, l]) =>
-    `<button class="tile ${tab === k ? "active" : ""}" onclick="goTab('${k}')"><div class="l">${l}</div><div class="v">${v}</div></button>`
+    `<strong class="num">${count("new")}</strong> new today · ` +
+    `<strong class="num">${open.filter(j => j.jobType === "Full-time").length}</strong> full-time · ` +
+    `<strong class="num">${count("direct")}</strong> with a direct company link · ` +
+    `<strong class="num">${count("applied")}</strong> applied`;
+  const t = [["all", "Open jobs"], ["new", "New today"], ["direct", "Direct link"], ["onsite", "In-person"],
+             ["remote", "Remote"], ["saved", "Saved"], ["applied", "Applied"]];
+  document.getElementById("tiles").innerHTML = t.map(([k, l]) =>
+    `<button class="tile ${tab === k ? "active" : ""}" onclick="goTab('${k}')"><div class="l">${l}</div><div class="v">${count(k)}</div></button>`
   ).join("");
 }
 
 function renderTabs() {
-  document.getElementById("tabs").innerHTML = TABS.map(([k, l]) =>
-    `<button class="tab ${tab === k ? "active" : ""}" onclick="goTab('${k}')">${l}</button>`
-  ).join("");
+  const pass = JOBS.filter(passesFilters);           // counts respect search + filters
+  document.getElementById("tabs").innerHTML = TABS.map(([k, l]) => {
+    const n = pass.reduce((c, j) => c + (matchesTab(j, k) ? 1 : 0), 0);
+    return `<button class="tab ${tab === k ? "active" : ""}" onclick="goTab('${k}')">${l}<span class="n">${n}</span></button>`;
+  }).join("");
 }
 
 function goTab(k) { tab = k; shown = PAGE; render(); }
@@ -1344,7 +1402,7 @@ const BADGES = [
   ["ten",     "🔟", "Double Digits",   "10 applications",                     s => s.applied >= 10],
   ["fifty",   "🚀", "Half-Century",    "50 applications",                     s => s.applied >= 50],
   ["hundred", "💯", "Centurion",       "100 applications",                    s => s.applied >= 100],
-  ["local",   "📍", "Local Legend",    "Apply to 3 Minnesota jobs",           s => s.local >= 3],
+  ["direct",  "🔗", "Straight to the Source", "Apply to 5 jobs on the company's own site", s => s.direct >= 5],
   ["grass",   "🏢", "Touch Grass",     "Apply to 5 in-person jobs",           s => s.onsite >= 5],
   ["explore", "🧭", "Explorer",        "Apply across 4 role categories",      s => s.cats >= 4],
   ["streak3", "🔥", "On Fire",         "3-day activity streak",               s => s.streak >= 3],
@@ -1386,7 +1444,7 @@ function gameStats() {
     appliedToday: entries.filter(([, v]) => v.s === "applied" && v.t === today).length,
     solvedToday: solvedDays.filter(x => x === today).length,
     triagedToday: game.triDay === today ? game.triToday : 0,
-    local: appliedJobs.filter(j => j.local).length,
+    direct: appliedJobs.filter(j => j.direct).length,
     onsite: appliedJobs.filter(j => j.mode === "onsite").length,
     cats: new Set(appliedJobs.map(j => j.cat)).size,
     clears: Object.keys(game.clears).length,
@@ -1591,7 +1649,7 @@ function qpAct(act) {
   if (act === "pass") { setStatus(j.id, "hidden", { quiet: true }); qpNext("left", 0); }
   else if (act === "save") { setStatus(j.id, "saved", { quiet: true }); qpNext("up", 10); }
   else if (act === "apply") {
-    window.open(j.url, "_blank", "noopener");
+    window.open(j.direct || j.url, "_blank", "noopener");
     document.getElementById("qpControls").hidden = true;
     document.getElementById("qpConfirm").hidden = false;
   } else if (act === "yes") { setStatus(j.id, "applied", { quiet: true }); qpNext("right", 50); }
@@ -2019,6 +2077,111 @@ function renderResPanel() {
     const p = document.getElementById("resPanel"); p.hidden = !p.hidden; renderResPanel();
   };
   renderResPanel();
+})();
+
+
+/* ═══ 🔗 APPLY LINKS · ⏱ PACE · 🧭 NAVIGATION ════════════════════ */
+const srcName = s => s.replace(/^GitHub\//, "").replace(/^JSearch\//, "");
+function findOnCompanySite(j) {
+  const q = `"${j.title}" "${j.company}" (site:greenhouse.io OR site:lever.co OR site:ashbyhq.com OR ` +
+            `site:myworkdayjobs.com OR site:icims.com OR site:smartrecruiters.com OR site:workable.com OR careers)`;
+  return "https://www.google.com/search?q=" + encodeURIComponent(q);
+}
+function applyLinks(j) {
+  if (j.direct) {
+    const via = j.direct !== j.url
+      ? `<a class="via" href="${esc(j.url)}" target="_blank" rel="noopener">via ${esc(srcName(j.source))}</a>` : "";
+    return `<a class="apply-btn" href="${esc(j.direct)}" target="_blank" rel="noopener" title="The company's own posting">Apply ↗</a>${via}`;
+  }
+  return `<a class="apply-btn" href="${esc(j.url)}" target="_blank" rel="noopener" title="Opens ${esc(srcName(j.source))}">Apply on ${esc(srcName(j.source))} ↗</a>
+    <a class="via" href="${esc(findOnCompanySite(j))}" target="_blank" rel="noopener"
+       title="Search for this exact role on the company's career site">🔎 Find on company site</a>`;
+}
+
+/* ── ⏱ applications today + pace ─────────────────────────── */
+function paceStats() {
+  const now = Date.now(), dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const applied = Object.values(statusMap).filter(v => v.s === "applied");
+  const today = applied.filter(v => v.ts && v.ts >= dayStart.getTime()).map(v => v.ts).sort((a, b) => a - b);
+  const todayCount = applied.filter(v => v.t === localDay()).length;
+  const lastHour = today.filter(t => now - t <= 3600e3).length;
+  // pace = applications per hour since your first one today (at least 15 min, so 1 app ≠ 60/hr)
+  const hrs = today.length ? Math.max((now - today[0]) / 3600e3, 0.25) : 0;
+  const perHr = today.length ? today.length / hrs : 0;
+  const gaps = today.slice(1).map((t, i) => t - today[i]);
+  const avgMin = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length / 60000 : null;
+  const hours = Array(24).fill(0);
+  today.forEach(t => hours[new Date(t).getHours()]++);
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const k = localDay(d);
+    days.push([k, applied.filter(v => v.t === k).length]);
+  }
+  return { todayCount, lastHour, perHr, perMin: perHr / 60, avgMin, hours, days };
+}
+function barsHTML(vals, labels, unit) {
+  const max = Math.max(...vals, 1);
+  return vals.map((v, i) => `<div class="bar" style="height:${v ? Math.max(4, Math.round(v / max * 52)) : 0}px">
+    <span class="tip">${labels[i]} · ${v} ${unit}${v === 1 ? "" : "s"}</span></div>`).join("");
+}
+function renderPace() {
+  const p = paceStats();
+  document.getElementById("paceBtn").innerHTML =
+    `✓ <b>${p.todayCount}</b> applied today <span class="sep">·</span> ` +
+    `<span class="opt">${p.lastHour} in last hr <span class="sep">·</span></span> ` +
+    `${p.perHr.toFixed(1)}/hr<span class="opt"> <span class="sep">·</span> ${p.avgMin ? "~" + Math.round(p.avgMin) + " min each" : "— min each"}</span>`;
+  const panel = document.getElementById("pacePanel");
+  if (panel.hidden) return;
+  const hourLbl = h => (h % 12 || 12) + (h < 12 ? "am" : "pm");
+  const best = p.days.reduce((a, b) => b[1] > a[1] ? b : a, ["", 0]);
+  panel.innerHTML = `<h2>⏱ Application pace</h2>
+    <div class="pace-kpis">
+      <div><div class="l">Applied today</div><div class="v">${p.todayCount}</div></div>
+      <div><div class="l">Last hour</div><div class="v">${p.lastHour}</div></div>
+      <div><div class="l">Per hour</div><div class="v">${p.perHr.toFixed(1)}</div></div>
+      <div><div class="l">Per minute</div><div class="v">${p.perMin.toFixed(2)}</div></div>
+      <div><div class="l">Avg time each</div><div class="v">${p.avgMin ? Math.round(p.avgMin) + " min" : "—"}</div></div>
+      <div><div class="l">Best day (7d)</div><div class="v">${best[1]}</div></div>
+    </div>
+    <div class="chart-head" style="margin-top:12px"><h2>Today, by hour</h2></div>
+    <div class="hourbars">${barsHTML(p.hours, p.hours.map((_, h) => hourLbl(h)), "application")}</div>
+    <div class="bar-axis"><span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>
+    <div class="chart-head" style="margin-top:12px"><h2>Last 7 days</h2></div>
+    <div class="hourbars">${barsHTML(p.days.map(d => d[1]), p.days.map(d => d[0]), "application")}</div>
+    <div class="bar-axis"><span>${p.days[0][0]}</span><span>today</span></div>
+    <p style="margin-top:10px">Pace counts applications marked ✓ Applied from now on (older marks have no time of day).</p>`;
+}
+document.getElementById("paceBtn").onclick = () => {
+  const p = document.getElementById("pacePanel"); p.hidden = !p.hidden; renderPace();
+  if (!p.hidden) p.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "nearest" });
+};
+setInterval(renderPace, 60000);           // "last hour" and pace age with the clock
+
+/* ── sticky bar shadow, back to top, shortcuts, auto-load ─── */
+(() => {
+  const bar = document.getElementById("stickybar"), top = document.getElementById("toTop");
+  const onScroll = () => {
+    bar.classList.toggle("stuck", bar.getBoundingClientRect().top <= 0.5);
+    top.classList.toggle("show", scrollY > 700);
+  };
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  top.onclick = () => scrollTo({ top: 0, behavior: REDUCED ? "auto" : "smooth" });
+  document.addEventListener("keydown", e => {
+    if (!document.getElementById("qp").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+      if (e.key === "Escape") document.activeElement.blur();
+      return;
+    }
+    if (e.key === "/") { e.preventDefault(); document.getElementById("q").focus(); }
+    else if (e.key === "t") scrollTo({ top: 0, behavior: REDUCED ? "auto" : "smooth" });
+  });
+  // load the next page automatically when "Show more" scrolls into view
+  if ("IntersectionObserver" in window) {
+    const more = document.getElementById("loadMore");
+    new IntersectionObserver(es => { if (es[0].isIntersecting && !more.hidden) more.click(); },
+                             { rootMargin: "600px" }).observe(more);
+  }
 })();
 
 refreshSyncUI();

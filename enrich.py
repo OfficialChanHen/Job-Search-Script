@@ -36,6 +36,7 @@ from urllib.parse import quote, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from direct_links import resolve_direct
 from interview_prep import detect_topics
 from job_rules import is_target_title, max_years_required, min_years_required
 
@@ -306,7 +307,7 @@ def fetch_generic(url: str) -> dict:
                    fetch_oracle, fetch_workable):
             got = fn(r.url)
             if got:
-                return got
+                return got | {"final": r.url}
     jp = _jsonld_posting(r.text)
     if not jp:
         return {"st": "none"}
@@ -627,6 +628,8 @@ def _enrich_one(row: dict) -> tuple[str, dict]:
         rec["y"] = meta["months"] // 12
     if meta.get("org"):
         rec["about"] = rec.get("about") or _clip(_sentences(meta["org"], 2), 320)
+    if meta.get("final"):
+        rec["final"] = meta["final"]          # direct_links turns this into the direct link
     return row["id"], rec
 
 
@@ -645,9 +648,12 @@ def enrich_rows(rows: list[dict], budget_s: float = 900, log=print) -> dict:
     returns the whole cache. Stops starting new fetches after budget_s."""
     cache, companies = _load(ENRICH_FILE), _load(COMPANY_FILE)
     todo = [r for r in rows if r.get("id") and _needs(cache.get(r["id"]))]
-    if not todo:
-        return cache
     t0, done = time.time(), 0
+    if not todo:
+        resolve_direct(rows, cache, companies, budget_s=max(60.0, budget_s / 2), log=log)
+        _save(ENRICH_FILE, cache)
+        _save(COMPANY_FILE, companies)
+        return cache
     log(f"🔎 Enriching {len(todo)} postings (budget {int(budget_s)}s) …")
     with ThreadPoolExecutor(WORKERS) as pool:
         futures = {}
@@ -683,14 +689,17 @@ def enrich_rows(rows: list[dict], budget_s: float = 900, log=print) -> dict:
     need_co = []
     for row in todo:
         ck = company_key(row.get("company", ""))
-        if ck and ck not in companies and ck not in {company_key(c) for c in need_co}:
+        if ck and not companies.get(ck, {}).get("src") and ck not in {company_key(c) for c in need_co}:
             need_co.append(row.get("company", ""))
     for name in need_co[:150]:
         if time.time() - t0 > budget_s + 120:
             break
         got = wikipedia_summary(name)
-        companies[company_key(name)] = (got or {"s": "", "src": "none"}) | {"d": TODAY}
+        companies[company_key(name)] = companies.get(company_key(name), {}) | (got or {"s": "", "src": "none"}) | {"d": TODAY}
         time.sleep(0.2)
+
+    # the company's own posting for LinkedIn / Dice / aggregator jobs
+    resolve_direct(rows, cache, companies, budget_s=max(60.0, budget_s - (time.time() - t0)), log=log)
 
     _save(ENRICH_FILE, cache)
     _save(COMPANY_FILE, companies)
