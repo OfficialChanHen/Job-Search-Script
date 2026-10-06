@@ -51,6 +51,13 @@ Location isn't ranked — anywhere in the US counts the same.
   where there's a well-known pattern) plus 6 problems chosen **for that job** — from ~175 problems
   in 20 topic pools, weighted by what the posting emphasizes (routing/logistics → graphs,
   real-time → heaps, databases → SQL, React → JS…), so different jobs get different lists
+- **One company at a time:** browsing tabs hide companies you applied to in the last 6 months
+  (✓ Applied marks + your sheet) and show at most the 2 best-matching jobs from each other company
+- **🎒 Apply kit** on each job: knockout checks read from the full posting (graduation year,
+  current-student only, clearance, citizenship, master's/PhD, cover letter, 2+ years), which
+  resume to send, your usual form answers with copy buttons (saved in your browser only), and
+  "Why us?" / "About you" drafts to rewrite in your own words, with a check for phrases that
+  read as generated. You still open the posting and press submit yourself.
 - Track per job: **✓ Applied / ★ Save / Hide** (stored in your browser)
 - **Google Sheets:** ✓ Applied auto-adds a row to your tracker (see [sheet-sync/README.md](sheet-sync/README.md));
   **📋 Copy row** copies any job in your sheet's column order for pasting;

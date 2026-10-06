@@ -29,7 +29,7 @@ import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -475,6 +475,37 @@ def _sentences(s: str, k: int) -> str:
     return " ".join(parts[:k])
 
 
+# Knockout checks for the dashboard's Apply kit: things a posting requires that
+# an application form will screen on.
+_FLAG_RES = [
+    ("enrolled", re.compile(r"\bcurrently (?:enrolled|pursuing)\b|\bmust be (?:a )?(?:current(?:ly)? )?(?:enrolled )?student\b|"
+                            r"\breturning (?:to school|student)\b|\benrolled in (?:a|an) [^.]{0,40}(?:program|degree)", re.I)),
+    ("clearance", re.compile(r"\bsecurity clearance\b|\bTS/SCI\b|\b(?:secret|top secret|active) clearance\b|"
+                             r"\bclearance (?:is )?required\b|\bability to obtain (?:and maintain )?(?:a|an) [^.]{0,30}clearance", re.I)),
+    ("citizen", re.compile(r"\bmust be (?:a )?U\.?S\.? citizen|\bU\.?S\.? citizenship (?:is )?required|"
+                           r"\brequires? U\.?S\.? citizenship|\bU\.?S\.? citizens only\b", re.I)),
+    ("grad degree", re.compile(r"\b(?:master'?s|M\.S\.|Ph\.?D\.?)(?: degree)? (?:is |are )?required\b|"
+                               r"\brequires? (?:a|an) (?:master|ph\.?d)", re.I)),
+    ("cover letter", re.compile(r"\bcover letter\b", re.I)),
+]
+_GRAD_WORD = re.compile(r"\bgraduat\w*", re.I)
+_YEAR = re.compile(r"\b(20[2-3]\d)\b")
+_YEAR_GRAD = re.compile(r"\b(?:class of\s+)?(20[2-3]\d)\s+(?:graduat|grads?\b|new grads?\b)", re.I)
+
+
+def posting_flags(full: str) -> list[str]:
+    """Knockout requirements: ["grad 2027/2028", "enrolled", "clearance", …]."""
+    flags = []
+    years = set(_YEAR_GRAD.findall(full))
+    for m in _GRAD_WORD.finditer(full):            # every year in the rest of that sentence
+        years.update(_YEAR.findall(re.split(r"[.\n;]", full[m.end():m.end() + 90])[0]))
+    years = sorted(years)
+    if years:
+        flags.append("grad " + "/".join(years))
+    flags += [name for name, rx in _FLAG_RES if rx.search(full)]
+    return flags
+
+
 def summarize(desc: str, company: str) -> dict:
     lines = to_lines(desc)
     sections: list[tuple[str, list[str]]] = [("", [])]
@@ -551,6 +582,7 @@ def summarize(desc: str, company: str) -> dict:
         "y": max_years_required(basis),
         "ymin": min_years_required(basis),
         "tp": detect_topics(full),
+        "fl": posting_flags(full),
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -625,7 +657,8 @@ def _enrich_one(row: dict) -> tuple[str, dict]:
         desc = meta.get("desc", "")
     rec = {"d": TODAY, "st": meta.get("st", "ok" if desc else "none")}
     if desc:
-        rec.update({k: v for k, v in summarize(desc, row.get("company", "")).items() if v not in ("", [], None)})
+        # "fl" is kept even when empty: it marks the posting as checked for knockouts
+        rec.update({k: v for k, v in summarize(desc, row.get("company", "")).items() if v not in ("", [], None) or k == "fl"})
         rec["st"] = "ok"
     if meta.get("level"):
         rec["lvl"] = meta["level"]
@@ -733,8 +766,33 @@ def backlog_rows() -> list[dict]:
     return rows
 
 
+def backfill_flags(days: int = 14, budget_s: float = 900, log=print) -> None:
+    """Re-read postings enriched before knockout flags existed (last `days` days)."""
+    cache = _load(ENRICH_FILE)
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    todo = [r for r in backlog_rows() if r.get("date_found", "") >= cutoff
+            and (cache.get(r["id"]) or {}).get("st") == "ok" and "fl" not in cache[r["id"]]]
+    t0, done = time.time(), 0
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(fetch_posting, r.get("url", "")): r for r in todo}
+        for fut in as_completed(futs):
+            if time.time() - t0 > budget_s:
+                ex.shutdown(wait=False, cancel_futures=True)
+                break
+            desc = (fut.result() or {}).get("desc", "")
+            if desc:
+                cache[futs[fut]["id"]]["fl"] = posting_flags(" ".join(to_lines(desc)))
+                done += 1
+    _save(ENRICH_FILE, cache)
+    log(f"  ✓ Knockout flags for {done}/{len(todo)} recent postings in {int(time.time() - t0)}s")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--budget", type=float, default=600, help="seconds to spend fetching (default 600)")
+    ap.add_argument("--flags", type=int, metavar="DAYS", help="only backfill knockout flags for the last DAYS days")
     args = ap.parse_args()
-    enrich_rows(backlog_rows(), budget_s=args.budget)
+    if args.flags:
+        backfill_flags(args.flags, budget_s=args.budget)
+    else:
+        enrich_rows(backlog_rows(), budget_s=args.budget)

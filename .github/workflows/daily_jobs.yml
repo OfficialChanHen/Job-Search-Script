@@ -56,6 +56,11 @@ jobs:
         continue-on-error: true
         run: python enrich.py --budget 600
 
+      # ── 4c. Knockout checks (grad year, clearance…) for postings read before they existed ──
+      - name: Backfill knockout flags
+        continue-on-error: true
+        run: python enrich.py --flags 14 --budget 300
+
       # ── 5. Build the dashboard (docs/index.html → GitHub Pages) ────────────
       - name: Build dashboard
         run: python build_dashboard.py

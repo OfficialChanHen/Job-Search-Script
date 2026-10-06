@@ -253,6 +253,8 @@ def classify_and_score(row: dict) -> dict:
         "gone": rec.get("st") == "gone",
         **({"direct": direct} if direct else {}),
         **({"sm": summary} if summary else {}),
+        # knockout checks from the full posting (absent = posting not checked yet)
+        **({"fl": rec["fl"]} if "fl" in rec else {}),
         **({"ck": ck} if ck in USED_COMPANIES else {}),
     }
 
@@ -768,6 +770,39 @@ button, input, select { font: inherit; }
 .ref .cc { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .ref .cc.over { color: var(--crit); font-weight: 600; }
 
+/* apply kit */
+.kit { grid-column: 2 / -1; margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .kit { grid-template-columns: 1fr; } }
+.kit .kcol { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--ink-2); min-width: 0; }
+.kit h4 { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 6px; }
+.kit h4:first-child { margin-top: 0; }
+.kit h4 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.kit p { margin: 0 0 6px; color: var(--ink-1); line-height: 1.5; }
+.kit p.src, .kit p.none { color: var(--ink-3); font-size: 12px; }
+.kit .ko { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.kit .ko li { display: flex; gap: 8px; line-height: 1.45; color: var(--ink-1); }
+.kit .ko li::first-letter { font-weight: 700; }
+.kit .ko li.bad { color: var(--crit); }
+.kit .ko li.warn { color: var(--ink-2); }
+.kit .ko li.ok { color: var(--good); }
+.kit .ko li span { flex: 1; }
+.kit .stds { display: grid; gap: 4px; }
+.kit .std { display: grid; grid-template-columns: 150px 1fr auto; gap: 6px; align-items: center; font-size: 12px; }
+@media (max-width: 520px) { .kit .std { grid-template-columns: 1fr auto; } .kit .std span { grid-column: 1 / -1; } }
+.kit .std input { min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-1); color: var(--ink-1); padding: 4px 8px; font-size: 12.5px; }
+.kit .std .mini { padding: 3px 7px; }
+.kit .kdraft { margin-top: 8px; }
+.kit .khead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; color: var(--ink-1); }
+.kit .tell { font-size: 11.5px; color: var(--good); }
+.kit .tell.warn { color: var(--ink-3); }
+.kit textarea {
+  width: 100%; min-height: 128px; resize: vertical; border-radius: 9px; border: 1px solid var(--border); margin-top: 4px;
+  background: var(--surface-1); color: var(--ink-1); padding: 8px 10px; font: inherit; font-size: 12.5px; line-height: 1.45;
+}
+.kit .row2 { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.kit .kgo { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+.kit .kgo a.mini { text-decoration: none; }
+
 /* results */
 .res-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0 12px; }
 .res-kpis div { background: var(--surface-2); border-radius: 10px; padding: 9px 11px; }
@@ -1225,6 +1260,7 @@ function card(j) {
         <button class="${s === "saved" ? "on-saved" : ""}" onclick="setStatus('${j.id}','${s === "saved" ? "" : "saved"}')">★ Save${s === "saved" ? "d" : ""}</button>
         <button class="${openSum[j.id] ? "on" : ""}" onclick="toggleSum('${j.id}')">📄 Summary</button>
         <button class="${openPrep[j.id] ? "on" : ""}" onclick="togglePrep('${j.id}')">${PREPS[j.prep].coding ? "🧠 LeetCode prep" : "🧠 Interview prep"}</button>
+        <button class="${openKit[j.id] ? "on" : ""}" onclick="toggleKit('${j.id}')">🎒 Apply kit</button>
         <button class="${openRef[j.id] ? "on" : ""}" onclick="toggleRef('${j.id}')">🤝 Referral${game.outreach[j.id] ? " ✓" : ""}</button>
         <button onclick="copyRow('${j.id}')" title="Copy as a row for your Google Sheet">📋 Copy row</button>
         <button onclick="setStatus('${j.id}','${s === "hidden" ? "" : "hidden"}')">${s === "hidden" ? "↩ Unhide" : "Hide"}</button>
@@ -1234,6 +1270,7 @@ function card(j) {
     ${openSum[j.id] ? sumPanel(j) : ""}
     ${openPrep[j.id] ? prepPanel(PREPS[j.prep]) : ""}
     ${openRef[j.id] ? refPanel(j) : ""}
+    ${openKit[j.id] ? kitPanel(j) : ""}
   </div>`;
 }
 
@@ -1788,6 +1825,152 @@ function copyText(text, msg) {
   const done = () => toast(msg || "📋 Copied");
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
   else fallbackCopy(text, done);
+}
+
+/* ═══ 🎒 APPLY KIT — everything for one application, you press submit ═══
+   Knockout checks from the posting, which resume to send, your standard
+   form answers (saved in this browser only, never in the repo), and short
+   "why us" drafts to rewrite in your own words.                        */
+const LS_KIT = "chan-applykit-v1";
+let kit = { std: {}, jobs: {} };
+try { kit = Object.assign(kit, JSON.parse(localStorage.getItem(LS_KIT) || "{}")); } catch (e) {}
+function saveKit() { try { localStorage.setItem(LS_KIT, JSON.stringify(kit)); } catch (e) {} }
+const openKit = {};
+function toggleKit(id) { openKit[id] = !openKit[id]; render(); }
+
+const STD_FIELDS = [
+  ["grad", "Graduation date", "05/2025"],
+  ["degree", "Degree", "B.S. Computer Science & Data Science, UW–Madison"],
+  ["gpa", "GPA", ""],
+  ["auth", "Authorized to work in the US?", ""],
+  ["spons", "Need visa sponsorship?", ""],
+  ["reloc", "Willing to relocate?", ""],
+  ["start", "Earliest start date", ""],
+  ["pay", "Salary expectation", ""],
+  ["links", "LinkedIn / GitHub / site", ""],
+];
+function stdVal(k) { const f = STD_FIELDS.find(x => x[0] === k); return kit.std[k] !== undefined ? kit.std[k] : (f ? f[2] : ""); }
+function setStd(k, v) { kit.std[k] = v; saveKit(); }
+
+// game-dev roles: the title or stack says so, or it's a known studio ("Scientific Games" isn't one)
+const GAME_ROLE = /\b(game|games|gameplay|gaming)\b|\bunity\b|\bunreal\b/i;
+const GAME_STUDIO = /^(riot|blizzard|epic games|valve|bungie|bethesda|activision|ubisoft|electronic arts|ea|nintendo|sony interactive|playstation|xbox|roblox|zynga|niantic|hi-rez|insomniac|naughty dog|respawn|bioware|2k|take-two|rockstar|supercell|scopely|jam city|wizards of the coast)\b/i;
+const isGame = j => GAME_ROLE.test(j.title + " " + ((j.sm && j.sm.stack) || []).join(" ")) || GAME_STUDIO.test((j.company || "").trim());
+// skills Chan can honestly claim, for the "strongest at" line when no resume is loaded
+const MY_SKILLS = new Set(["React", "React Native", "TypeScript", "Next.js", "Tailwind CSS", "JavaScript", "Python", "SQL",
+  "PostgreSQL", "Figma", "Java", "C", "C#", "Unity", "pandas", "Supabase", "Git", "REST APIs", "HTML/CSS", "Expo"]);
+
+function knockouts(j) {
+  const out = [], fl = j.fl || [];
+  const bad = t => out.push(["bad", t]), warn = t => out.push(["warn", t]), ok = t => out.push(["ok", t]);
+  const y = parseInt(j.exp, 10);
+  if (!isNaN(y) && y >= 2) bad(`Asks for ${y}+ years of experience.`);
+  else if (!isNaN(y)) ok(`Experience asked: ${j.exp}.`);
+  const g = fl.find(f => f.startsWith("grad "));
+  const mine = (stdVal("grad").match(/20\d\d/) || [])[0];
+  if (g) {
+    const yrs = g.slice(5).split("/");
+    if (mine && !yrs.includes(mine)) bad(`Mentions graduating in ${yrs.join(" or ")}. Your graduation date is ${esc(stdVal("grad"))}. Read that line closely: if it's a requirement, the form will screen you out.`);
+    else warn(`Mentions graduating in ${yrs.join(" or ")}. Check the exact window.`);
+  } else if (j.gradWindow) warn("New-grad title. Check the graduation window in the posting.");
+  if (fl.includes("enrolled")) bad("Wants a current student. If you're not enrolled, answer that question honestly; it's usually a knockout.");
+  if (fl.includes("clearance")) warn("Mentions a security clearance.");
+  if (fl.includes("citizen")) warn("Requires US citizenship.");
+  if (fl.includes("grad degree")) warn("Asks for a master's or PhD.");
+  if (fl.includes("cover letter")) warn("Mentions a cover letter. Use the drafts below as a start.");
+  if (j.closed) bad("No longer on the company's job board.");
+  if (j.reposts >= 3) warn(`Posted ${j.reposts} times. Could be an evergreen listing, so a referral helps more than usual.`);
+  if (j.stale) warn("Found 30+ days ago and can't be re-checked. It may be filled.");
+  if (j.jobType && j.jobType !== "Full-time") warn(`Listed as ${esc(j.jobType)}.`);
+  if (!j.fl) warn("The full posting hasn't been checked for knockouts yet. Read the requirements yourself.");
+  else if (!out.some(([k]) => k !== "ok")) ok("No knockouts found in the posting.");
+  return out;
+}
+
+const FOCUS = {
+  frontend: "frontend work in React and TypeScript", mobile: "building mobile apps",
+  data_analyst: "turning data into answers with Python and SQL", data_eng: "working with data pipelines and SQL",
+  analyst: "turning data into answers with Python and SQL", ml_ai: "working close to AI models",
+  ai_training: "working close to AI models", devops: "keeping software running and shipping it",
+  qa: "testing and catching bugs before users do",
+};
+// [short name for "why us", a sentence for "about you"]
+function bestProject(j) {
+  if (isGame(j)) return ["TANKS!, a Unity game I made in C#",
+    "I also make games in Unity. My latest is TANKS!, a local multiplayer tank game written in C#."];
+  if (/data|analyst/.test(j.cat)) return ["a Python backtester I wrote for stock strategies",
+    "On my own I wrote a Python backtester for testing stock trading strategies."];
+  if (/ml_ai|ai_training/.test(j.cat)) return ["my work reviewing AI-written code at DataAnnotation",
+    "Right now I review AI-written code at DataAnnotation."];
+  return ["Hourelle, a group scheduling app I built and run",
+    "I also built and run hourelle.com, a group scheduling app on Next.js and Supabase."];
+}
+function kitDrafts(j) {
+  const focus = isGame(j) ? "building things players actually touch" : FOCUS[j.cat] || "building real features end to end";
+  const f = typeof fitFor === "function" ? fitFor(j) : null;
+  const have = (f && f.best ? f.best.have : jobSkills(j).filter(k => MY_SKILLS.has(k))).slice(0, 2);
+  const [proj, projLine] = bestProject(j);
+  return {
+    why: `I want to work at ${j.company} because [one specific reason in your own words: something they make that you use, a feature you like, or someone there you talked to]. ` +
+         `This role stood out because it's ${focus}, which is what I've been doing with ${proj}.`,
+    you: `I graduated from UW–Madison in Computer Science and Data Science and worked as a software engineer at Nodeoven. ${projLine}` +
+         (have.length ? ` The parts of this job I'd be strongest at use ${have.join(" and ")}.` : ""),
+  };
+}
+const KIT_TELLS = /\b(leverag\w*|utiliz\w*|spearhead\w*|robust|seamless\w*|passionate|thrilled|excited to|delv\w*|cutting-edge|innovative|dynamic|synerg\w*|fast-paced|results-driven|align(s|ed)? with my|resonat\w*)\b|—/gi;
+function tellNote(text) {
+  const hits = [...new Set((text.match(KIT_TELLS) || []).map(s => s.toLowerCase()))];
+  return hits.length ? `Sounds generated: ${hits.map(esc).join(", ")}` : (/\[[^\]]+\]/.test(text) ? "Fill in the [bracketed] part" : "Reads fine");
+}
+function kitText(id, key, j) {
+  const saved = (kit.jobs[id] || {})[key];
+  return saved !== undefined ? saved : kitDrafts(j)[key];
+}
+function kitEdit(id, key, el) {
+  kit.jobs[id] = kit.jobs[id] || {};
+  kit.jobs[id][key] = el.value; saveKit();
+  const n = document.getElementById(`kt-${key}-${id}`);
+  if (n) { n.textContent = tellNote(el.value); n.className = "tell" + (/generated|bracketed/.test(n.textContent) ? " warn" : ""); }
+}
+function kitReset(id, key) { if (kit.jobs[id]) delete kit.jobs[id][key]; saveKit(); render(); }
+
+function kitPanel(j) {
+  const ko = knockouts(j).map(([k, t]) => `<li class="${k}">${k === "bad" ? "✕" : k === "warn" ? "!" : "✓"}<span>${t}</span></li>`).join("");
+  const f = typeof fitFor === "function" ? fitFor(j) : null;
+  let res;
+  if (isGame(j)) res = `<p>Game role. Send your <b>Riot</b> resume with TANKS! near the top. In the resume editor, use <b>+ Copy variant</b> to make one named for ${esc(j.company)}.</p>`;
+  else if (f && f.best) res = `<p>Send <b>${esc(shortName(f.best.r.name))}</b>${f.need.length ? ` (covers ${f.best.have.length} of ${f.need.length} skills named)` : ""}.</p>` +
+    (f.best.missing.length ? `<p class="src">Not on it: ${f.best.missing.map(esc).join(", ")}. Leave those off unless you've used them.</p>` : "");
+  else res = `<p class="none">Add your resume PDFs in <b>📄 My resumes</b> and this picks the best one for each job.</p>`;
+  const std = STD_FIELDS.map(([k, label]) => `<label class="std"><span>${label}</span>
+      <input value="${esc(stdVal(k))}" onchange="setStd('${k}', this.value)" placeholder="—">
+      <button class="mini" title="Copy" onclick="copyText(this.previousElementSibling.value)">📋</button></label>`).join("");
+  const draft = (key, label) => {
+    const t = kitText(j.id, key, j), note = tellNote(t);
+    return `<div class="kdraft"><div class="khead"><b>${label}</b>
+        <span class="tell${/generated|bracketed/.test(note) ? " warn" : ""}" id="kt-${key}-${j.id}">${note}</span></div>
+      <textarea oninput="kitEdit('${j.id}','${key}',this)">${esc(t)}</textarea>
+      <div class="row2"><button class="mini" onclick="kitReset('${j.id}','${key}')">↺ Start over</button>
+        <button class="mini" onclick="copyText(this.closest('.kdraft').querySelector('textarea').value, '📋 Copied')">📋 Copy</button></div></div>`;
+  };
+  const s = st(j.id);
+  return `<div class="kit">
+    <div class="kcol">
+      <h4>Before you apply</h4><ul class="ko">${ko}</ul>
+      <h4>Resume to send</h4>${res}
+      <h4>Your usual answers <small>(saved in this browser only)</small></h4><div class="stds">${std}</div>
+    </div>
+    <div class="kcol">
+      <h4>Short answers</h4>
+      <p class="src">Starting points built from the posting. Rewrite them so they sound like you. The [bracketed] part is what a reader actually remembers.</p>
+      ${draft("why", "Why " + esc(j.company || "this company") + "?")}
+      ${draft("you", "About you / why you fit")}
+      <div class="kgo">
+        <a class="mini primary" href="${esc(j.direct || j.url)}" target="_blank" rel="noopener">Open posting ↗</a>
+        <button class="mini ${s === "applied" ? "ok" : ""}" onclick="setStatus('${j.id}','${s === "applied" ? "" : "applied"}')">${s === "applied" ? "✓ Applied" : "I submitted it ✓"}</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* ── 🔁 spaced review of solved LeetCode (3 → 7 → 14 days) ──── */
