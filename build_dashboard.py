@@ -1124,8 +1124,47 @@ function passesFilters(j) {
     (!jobType || tab === "parttime" || j.type === "parttime" || (jobType === "?" ? !j.jobType : j.jobType === jobType)) &&
     (!q || (j.title + " " + j.company + " " + j.location + " " + j.catLabel + " " + j.chips.join(" ")).toLowerCase().includes(q));
 }
+/* ── one company at a time ─────────────────────────────────────
+   Browsing tabs skip any company you applied to in the last 6 months
+   (✓ Applied marks + your sheet), and show at most the 2 best-fitting
+   listings from each remaining company. Saved / Applied / Hidden show all. */
+const COOLDOWN_DAYS = 182, PER_COMPANY = 2;
+const CO_SUFFIX = /\b(inc|llc|l\.l\.c|ltd|corp|corporation|co|company|group|holdings|plc|usa|us|the|technologies|technology|labs)\b\.?/gi;
+const coKey = name => (name || "").toLowerCase().replace(CO_SUFFIX, " ").replace(/[^a-z0-9]+/g, " ").trim();
+function recentlyApplied() {
+  const last = {};
+  const note = (co, iso) => { const k = coKey(co); if (k && iso && (!last[k] || iso > last[k])) last[k] = iso; };
+  Object.entries(statusMap).forEach(([id, v]) => {
+    const j = JOB_BY_ID[id];
+    if (v.s === "applied" && j) note(j.company, v.t);
+  });
+  (game.sheet.rows || []).forEach(r => { if (outcomeOf(r) !== "other") note(r.company, parseSheetDate(r.date)); });
+  Object.keys(last).forEach(k => { if (daysSince(last[k]) > COOLDOWN_DAYS) delete last[k]; });
+  return last;
+}
+let companyNote = "";
+function onePerCompany(rows, k) {
+  k = k || tab;
+  if (k === tab) companyNote = "";
+  if (["saved", "applied", "hidden"].includes(k)) return rows;
+  const applied = recentlyApplied(), seen = {};
+  let cooled = 0, capped = 0;
+  const best = [...rows].sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
+  const keep = new Set(best.filter(j => {
+    const k = coKey(j.company);
+    if (!k) return true;
+    if (applied[k]) { cooled++; return false; }
+    seen[k] = (seen[k] || 0) + 1;
+    if (seen[k] > PER_COMPANY) { capped++; return false; }
+    return true;
+  }));
+  if (k === tab && cooled) companyNote += ` · ${cooled} hidden from companies you applied to in the last 6 months`;
+  if (k === tab && capped) companyNote += ` · ${capped} more from companies already shown twice`;
+  return rows.filter(j => keep.has(j));
+}
+
 function filtered() {
-  let rows = JOBS.filter(j => matchesTab(j) && passesFilters(j));
+  let rows = onePerCompany(JOBS.filter(j => matchesTab(j) && passesFilters(j)));
   if (sortBy === "date") rows.sort((a, b) => b.date.localeCompare(a.date) || b.score - a.score);
   else rows.sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
   return rows;
@@ -1143,7 +1182,7 @@ function render() {
   document.getElementById("countNote").textContent = "Showing " +
     rows.length + (jobType && jobType !== "?" ? " " + jobType.toLowerCase() : "") +
     " listing" + (rows.length === 1 ? "" : "s") +
-    (tab === "new" ? " found today (" + LATEST + ")" : "");
+    (tab === "new" ? " found today (" + LATEST + ")" : "") + companyNote;
   const list = document.getElementById("list");
   list.innerHTML = rows.slice(0, shown).map(card).join("") ||
     '<div class="empty">Nothing here — try another tab, job type, or clear the search.</div>';
@@ -1306,7 +1345,7 @@ function renderTiles() {
 function renderTabs() {
   const pass = JOBS.filter(passesFilters);           // counts respect search + filters
   document.getElementById("tabs").innerHTML = TABS.map(([k, l]) => {
-    const n = pass.reduce((c, j) => c + (matchesTab(j, k) ? 1 : 0), 0);
+    const n = onePerCompany(pass.filter(j => matchesTab(j, k)), k).length;
     return `<button class="tab ${tab === k ? "active" : ""}" onclick="goTab('${k}')">${l}<span class="n">${n}</span></button>`;
   }).join("");
 }
