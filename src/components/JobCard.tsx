@@ -2,7 +2,8 @@
 import { memo, useState } from "react";
 import type { Company, Job, Prep } from "@/lib/data/types";
 import { confetti, floatFood, floatXP, toast } from "@/lib/client/effects";
-import { NS, setStatus, toggleSolved, type JobStatus, type SheetRow, type StatusEntry } from "@/lib/game/progress";
+import { NS, setStatus, toggleSolved, type JobStatus, type KitJob, type ResumeEntry, type SheetRow, type StatusEntry } from "@/lib/game/progress";
+import { FitBox, FitChip, KitPanel, RefPanel } from "./CardPanels";
 import { copySheetRow, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
 import type { Store } from "@/lib/sync/store";
 
@@ -21,9 +22,12 @@ export interface CardProps {
   store: Store;
   sheetUrl: string;
   synced: boolean;
+  resumes: ResumeEntry[];
+  kit: KitJob | undefined;
+  outreach: string | undefined;
 }
 
-function Chips({ j, latest, sheet }: { j: Job; latest: string; sheet: SheetRow | undefined }) {
+function Chips({ j, latest, sheet, resumes }: { j: Job; latest: string; sheet: SheetRow | undefined; resumes: ResumeEntry[] }) {
   const d = j.drive;
   return (
     <div className="badges">
@@ -41,6 +45,7 @@ function Chips({ j, latest, sheet }: { j: Job; latest: string; sheet: SheetRow |
       {d && (d.eff != null
         ? <span className={"chip " + (d.ok ? "type-ft" : "flag-warn")} title={`Pays $${d.pay?.toFixed(2)}/hr. Over a 4-hour shift, after gas and drive time: $${d.eff.toFixed(2)}/hr`}>💵 ${d.eff.toFixed(2)}/hr after driving{d.ok ? "" : " (borderline)"}</span>
         : <span className="chip flag-src" title="The posting doesn't list pay. Check it before driving far.">💵 pay not listed</span>)}
+      <FitChip j={j} resumes={resumes} />
       {j.gradWindow && <span className="chip flag-warn" title="New-grad posting. Check the required graduation window; many also accept grads within 12 to 24 months.">⚠ check grad window</span>}
       {j.chips.map(c => <span key={c} className="chip">{c}</span>)}
       <span className="chip muted">{j.source}, {j.date}</span>
@@ -48,11 +53,11 @@ function Chips({ j, latest, sheet }: { j: Job; latest: string; sheet: SheetRow |
   );
 }
 
-function SummaryPanel({ j, company }: { j: Job; company: Company | undefined }) {
+function SummaryPanel({ j, company, resumes }: { j: Job; company: Company | undefined; resumes: ResumeEntry[] }) {
   const m = j.sm || {};
   const list = (xs?: string[]) => xs?.length ? <ul>{xs.map((x, i) => <li key={i}>{x}</li>)}</ul> : null;
   return (
-    <div className="sumbox">
+    <div className="sumbox three">
       <div>
         <h4>📄 The job</h4>
         {m.sum || m.do || m.need ? <>
@@ -76,6 +81,7 @@ function SummaryPanel({ j, company }: { j: Job; company: Company | undefined }) 
           <div className="src"><a href={`https://www.google.com/search?q=${encodeURIComponent(j.company + " company")}`} target="_blank" rel="noopener">Search {j.company} ↗</a></div>
         </>}
       </div>
+      <div><h4>🎯 Resume fit</h4><FitBox j={j} resumes={resumes} /></div>
     </div>
   );
 }
@@ -102,8 +108,8 @@ function PrepPanel({ prep, solved, store }: { prep: Prep; solved: Record<string,
   );
 }
 
-function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, latest, store, sheetUrl, synced }: CardProps) {
-  const [open, setOpen] = useState<{ sum?: boolean; prep?: boolean }>({});
+function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, latest, store, sheetUrl, synced, resumes, kit, outreach }: CardProps) {
+  const [open, setOpen] = useState<{ sum?: boolean; prep?: boolean; kit?: boolean; ref?: boolean }>({});
   const s = status?.s || "";
   const set = (next: JobStatus | "") => {
     setStatus(store, j.id, next);
@@ -124,12 +130,14 @@ function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, lates
       <div>
         <h3><a href={j.direct || j.url} target="_blank" rel="noopener">{j.title}</a></h3>
         <div className="meta"><span className="co">{j.company || "—"}</span><span className="dot">📍</span>{j.location}</div>
-        <Chips j={j} latest={latest} sheet={sheet} />
+        <Chips j={j} latest={latest} sheet={sheet} resumes={resumes} />
         <div className="actions">
           <button className={s === "applied" ? "on-applied" : ""} onClick={() => set(s === "applied" ? "" : "applied")}>✓ Applied{s === "applied" && status ? " " + status.t.slice(5) : ""}</button>
           <button className={s === "saved" ? "on-saved" : ""} onClick={() => set(s === "saved" ? "" : "saved")}>★ Save{s === "saved" ? "d" : ""}</button>
           <button className={open.sum ? "on" : ""} onClick={() => setOpen(o => ({ ...o, sum: !o.sum }))}>📄 Summary</button>
           <button className={open.prep ? "on" : ""} onClick={() => setOpen(o => ({ ...o, prep: !o.prep }))}>{prep?.coding ? "🧠 LeetCode prep" : "🧠 Interview prep"}</button>
+          <button className={open.kit ? "on" : ""} onClick={() => setOpen(o => ({ ...o, kit: !o.kit }))}>🎒 Apply kit</button>
+          <button className={open.ref ? "on" : ""} onClick={() => setOpen(o => ({ ...o, ref: !o.ref }))}>🤝 Referral{outreach ? " ✓" : ""}</button>
           <button onClick={copyRow} title="Copy as a row for your Google Sheet">📋 Copy row</button>
           <button onClick={() => set(s === "hidden" ? "" : "hidden")}>{s === "hidden" ? "↩ Unhide" : "Hide"}</button>
         </div>
@@ -144,8 +152,10 @@ function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, lates
              href={"https://www.google.com/search?q=" + encodeURIComponent(`"${j.title}" "${j.company}" (site:greenhouse.io OR site:lever.co OR site:ashbyhq.com OR site:myworkdayjobs.com OR site:icims.com OR site:smartrecruiters.com OR site:workable.com OR careers)`)}>🔎 Find on company site</a>
         </>}
       </div>
-      {open.sum && <SummaryPanel j={j} company={company} />}
+      {open.sum && <SummaryPanel j={j} company={company} resumes={resumes} />}
       {open.prep && prep && <PrepPanel prep={prep} solved={solved} store={store} />}
+      {open.ref && <RefPanel j={j} store={store} sent={outreach} />}
+      {open.kit && <KitPanel j={j} store={store} resumes={resumes} kit={kit} applied={s === "applied"} onApplied={() => set(s === "applied" ? "" : "applied")} />}
     </div>
   );
 }

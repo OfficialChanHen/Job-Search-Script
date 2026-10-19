@@ -1,11 +1,18 @@
 "use client";
 import { useState } from "react";
 import { BADGES, levelFor, levelStart, titleFor } from "@/lib/game/xp";
+import { followUps } from "@/lib/game/followups";
+import { dueReviews } from "@/lib/game/reviews";
 import { useGame } from "./GameContext";
+import { SidePanel } from "./Panels";
+import { useUi } from "./UiContext";
 
 /** Level, XP, daily quests, streak and badges. */
 export default function Hud() {
-  const { stats: s, p } = useGame();
+  const { stats: s, p, byId } = useGame();
+  const { side, setSide, setQp } = useUi();
+  const nFu = followUps(p, byId).length, nRev = dueReviews(p).length;
+  const dot = (n: number) => n ? <span className="dot-n">{n}</span> : null;
   const [showBadges, setShowBadges] = useState(false);
   const lvl = levelFor(s.xp), lo = levelStart(lvl), hi = levelStart(lvl + 1);
   const pct = Math.round((s.xp - lo) / (hi - lo) * 100);
@@ -34,6 +41,11 @@ export default function Hud() {
           </ul>
         </div>
         <div className="hud-side">
+          <button className="play-btn" onClick={() => setQp(true)} title="Triage jobs one at a time, keyboard friendly">🎮 Quick Play</button>
+          <div className="hud-actions">
+            <button className="badge-btn" onClick={() => setSide(side === "followups" ? "" : "followups")} title="Applications 7+ days old with no reply">📬 Follow-ups{dot(nFu)}</button>
+            <button className="badge-btn" onClick={() => setSide(side === "reviews" ? "" : "reviews")} title="LeetCode problems due for spaced review">🔁 Reviews{dot(nRev)}</button>
+          </div>
           <button className="badge-btn" onClick={() => setShowBadges(b => !b)} aria-expanded={showBadges}>🏆 {got}/{BADGES.length} badges</button>
         </div>
       </section>
@@ -47,6 +59,7 @@ export default function Hud() {
           ))}
         </div>
       )}
+      <SidePanel />
     </>
   );
 }

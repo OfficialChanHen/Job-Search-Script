@@ -248,6 +248,16 @@ export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random): FightOu
   return { v: next, boss, log, win: res.win, timeout: !!res.timeout, t: res.t, reward };
 }
 
+/** Apply a fight's result to any copy of the village (used when replaying after a sync conflict). */
+export function applyFight(v: VillageState, z: number, win: boolean, reward: number, party: Party): VillageState {
+  let next: VillageState = { ...v, bossFood: v.bossFood + 1, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (win ? 1 : 0) } };
+  if (win && v.unlocked <= z) {
+    next = { ...next, unlocked: z + 1, hunted: next.hunted + reward };
+    if (goldPerHour(next, party, z + 1) >= goldPerHour(next, party, v.zone)) next.zone = z + 1;
+  }
+  return next;
+}
+
 /* ── win chance (memoized: it's a Monte Carlo estimate) ────── */
 const winMemo = new Map<string, number>();
 export function winChance(units: Unit[], z: number, n = 80, rnd = Math.random): number {

@@ -1,16 +1,22 @@
 "use client";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { NS, type SheetRow } from "@/lib/game/progress";
+import { NS, type KitJob, type ResumeEntry, type SheetRow } from "@/lib/game/progress";
 import { JOB_TYPES, TABS, matchesTab, onePerCompany, passesFilters, recentlyApplied, type Filters } from "@/lib/jobs/filters";
 import { useGame } from "./GameContext";
 import JobCard from "./JobCard";
+import { ToolPanels, Toolbar } from "./Panels";
+import QuickPlay from "./QuickPlay";
+import StickyTop, { PacePanel } from "./StickyTop";
 
 const PAGE = 60;
 const TILES: [string, string][] = [["all", "Open jobs"], ["new", "New today"], ["direct", "Direct link"], ["onsite", "In-person"],
   ["remote", "Remote"], ["parttime", "Local part-time"], ["saved", "Saved"], ["applied", "Applied"]];
 
 export default function JobBoard() {
-  const { data, byId, p, store } = useGame();
+  const { data, byId, p, store, rev } = useGame();
+  const resumes = useMemo(() => store.entries<ResumeEntry>(NS.resume).map(([, r]) => r),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, rev]);
   const [tab, setTab] = useState("new");
   const [query, setQuery] = useState("");
   const [source, setSource] = useState("");
@@ -77,6 +83,7 @@ export default function JobBoard() {
         ))}
       </div>
       <div className="stickybar">
+        <StickyTop />
         <div className="tabs" role="tablist">
           {TABS.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} className={"tab" + (tab === k ? " active" : "")} onClick={() => go(k)}>
@@ -103,16 +110,20 @@ export default function JobBoard() {
           </select>
         </div>
       </div>
-      <div className="bar-row"><div className="count-note">{note}</div></div>
+      <PacePanel />
+      <div className="bar-row"><div className="count-note">{note}</div><Toolbar /></div>
+      <ToolPanels />
       <div id="list">
         {view.rows.slice(0, shown).map(j => (
           <JobCard key={j.id} job={j} prep={data.preps[j.prep]} company={j.ck ? data.companies[j.ck] : undefined}
             status={p.status[j.id]} solved={p.solved} sheetRow={sheetByUrl.get(j.url)} latest={latest}
-            store={store} sheetUrl={sheetUrl} synced={!!store.get(NS.synced, j.id)} />
+            store={store} sheetUrl={sheetUrl} synced={!!store.get(NS.synced, j.id)} resumes={resumes}
+            kit={store.get<KitJob>(NS.kitJob, j.id)} outreach={p.outreach[j.id]} />
         ))}
         {!view.rows.length && <div className="empty">Nothing here. Try another tab or job type, or clear the search.</div>}
       </div>
       {hasMore && <button ref={more} className="loadmore" onClick={showMore}>Show more</button>}
+      <QuickPlay rows={view.rows} status={p.status} data={data} store={store} solved={p.solved} />
     </>
   );
 }

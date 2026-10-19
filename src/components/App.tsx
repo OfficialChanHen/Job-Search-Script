@@ -15,6 +15,9 @@ import type { Store } from "@/lib/sync/store";
 import Account from "./Account";
 import { GameProvider, useDerived, useGame, type Game } from "./GameContext";
 import Hud from "./Hud";
+import { VillageStrip, VillageWindow } from "./Village";
+import { UiProvider } from "./UiContext";
+import { loadSheetRows } from "@/lib/client/sheetRows";
 import JobBoard from "./JobBoard";
 
 export default function App() {
@@ -37,6 +40,7 @@ function Loaded({ data, store }: { data: JobData; store: Store }) {
   useCelebrations(game);
   return (
     <GameProvider value={game}>
+     <UiProvider>
       <div className="wrap">
         <header className="hero">
           <div className="eyebrow">Chan Hen&apos;s job hunt</div>
@@ -46,10 +50,13 @@ function Loaded({ data, store }: { data: JobData; store: Store }) {
         </header>
         <Account />
         <Hud />
+        <VillageStrip />
         <JobBoard />
       </div>
+      <VillageWindow />
       <Toast />
       <canvas id="confetti" />
+     </UiProvider>
     </GameProvider>
   );
 }
@@ -70,6 +77,12 @@ function Summary() {
 
 /* ── sign-in state → sync ───────────────────────────────────── */
 function useSync(store: Store) {
+  // your sheet's rows (Results, follow-ups, status chips, interview XP): on open and every 20 minutes
+  useEffect(() => {
+    loadSheetRows(store);
+    const t = setInterval(() => loadSheetRows(store), 20 * 60_000);
+    return () => clearInterval(t);
+  }, [store]);
   useEffect(() => {
     const sb = supabaseBrowser();
     if (!sb) return;
