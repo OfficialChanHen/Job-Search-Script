@@ -1,0 +1,7 @@
+# Only the Next.js app is deployed: skip the scraper's CSV history, the legacy page and the moved page.
+scraper/
+legacy/
+docs/
+sheet-sync/
+resumes/
+.venv/

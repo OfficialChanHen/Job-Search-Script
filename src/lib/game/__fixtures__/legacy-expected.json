@@ -1,0 +1,62 @@
+{
+ "xp": 1112,
+ "streak": 6,
+ "quests": [
+  [
+   "Apply to 3 jobs",
+   1,
+   3
+  ],
+  [
+   "Solve or review 2 LeetCode problems",
+   3,
+   2
+  ],
+  [
+   "Reach out or follow up once",
+   2,
+   1
+  ],
+  [
+   "Triage 10 jobs in Quick Play",
+   4,
+   10
+  ]
+ ],
+ "applied": 6,
+ "direct": 3,
+ "onsite": 6,
+ "cats": 1,
+ "interviews": 1,
+ "daHours": 2.25,
+ "hunters": 6,
+ "triaged": 31,
+ "before": {
+  "food": 28.25,
+  "gold": 438,
+  "gph": 40.019999999999996,
+  "eff": 1,
+  "power": 383,
+  "dps": 155.77301025000003,
+  "hp": 943.7040000000001,
+  "hunt": 35.3125
+ },
+ "settled": {
+  "h": 3,
+  "g": 120.05999999999999,
+  "gold": 558.06,
+  "food": 25.85
+ },
+ "raid": {
+  "dmg": 51,
+  "hp": 220
+ },
+ "training": {
+  "hashing": 4,
+  "sliding_window": 1,
+  "intervals": 1,
+  "stack": 1,
+  "graphs": 2,
+  "dp": 1
+ }
+}
