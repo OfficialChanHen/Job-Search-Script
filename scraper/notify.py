@@ -29,7 +29,7 @@ import requests
 from build_data import load_jobs
 
 # The app on Vercel. Set the DASHBOARD_URL repo variable if you pick a different address.
-DASHBOARD_URL = os.getenv("DASHBOARD_URL") or "https://job-search-script-5zkq-sand.vercel.app/"
+DASHBOARD_URL = os.getenv("DASHBOARD_URL") or "https://job-search-script.vercel.app/"
 TOP_N = 10
 FOLLOW_UP_DAYS = (7, 21)       # applications this many days old with no reply
 
