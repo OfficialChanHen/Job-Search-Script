@@ -1,3 +1,24 @@
+# ── Next.js app ──
+/node_modules
+/.next/
+/out/
+/build
+/coverage
+next-env.d.ts
+*.tsbuildinfo
+.vercel
+.env*
+!.env.example
+npm-debug.log*
+.DS_Store
+*.pem
+
+# ── Python scraper ──
 .venv/
 __pycache__/
+
+# ── personal (public repo) ──
 resumes/
+
+# ── legacy dashboard, built locally for comparison ──
+legacy/index.html

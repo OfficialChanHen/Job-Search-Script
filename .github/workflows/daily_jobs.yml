@@ -31,10 +31,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
 
       # ── 3. Dependencies ────────────────────────────────────────────────────
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r scraper/requirements.txt
 
       # ── 4. Run the hunter ──────────────────────────────────────────────────
       - name: Run job_hunter.py
@@ -49,21 +50,21 @@ jobs:
           # Indeed / Glassdoor / ZipRecruiter via Google for Jobs — free RapidAPI key
           # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
           JSEARCH_KEY:    ${{ secrets.JSEARCH_KEY }}
-        run: python job_hunter.py
+        run: python scraper/job_hunter.py
 
       # ── 4b. Read older postings in the background (summaries, years, company) ──
       - name: Enrich backlog of older postings
         continue-on-error: true
-        run: python enrich.py --budget 600
+        run: python scraper/enrich.py --budget 600
 
       # ── 4c. Knockout checks (grad year, clearance…) for postings read before they existed ──
       - name: Backfill knockout flags
         continue-on-error: true
-        run: python enrich.py --flags 14 --budget 300
+        run: python scraper/enrich.py --flags 14 --budget 300
 
-      # ── 5. Build the dashboard (docs/index.html → GitHub Pages) ────────────
-      - name: Build dashboard
-        run: python build_dashboard.py
+      # ── 5. Build the site's data (public/data/*.json → the app on Vercel) ──
+      - name: Build site data
+        run: python scraper/build_data.py
 
       # ── 5b. Morning digest (only if a channel secret is set — see README) ──
       - name: Send morning digest
@@ -75,7 +76,8 @@ jobs:
           SMTP_PASSWORD:       ${{ secrets.SMTP_PASSWORD }}
           DIGEST_EMAIL_TO:     ${{ secrets.DIGEST_EMAIL_TO }}
           SHEET_EXEC_URL:      ${{ secrets.SHEET_EXEC_URL }}
-        run: python notify.py
+          DASHBOARD_URL:       ${{ vars.DASHBOARD_URL }}
+        run: python scraper/notify.py
 
       # ── 6. Commit results back to the repo ─────────────────────────────────
       - name: Commit & push results
@@ -83,7 +85,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add data/ logs/ docs/
+          git add scraper/data/ scraper/logs/ public/data/
 
           # Only commit if something actually changed (avoids empty commits)
           if git diff --staged --quiet; then
@@ -99,7 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jobs-${{ env.DATE || 'today' }}
-          path: data/jobs_*.csv
+          path: scraper/data/jobs_*.csv
           retention-days: 30
           # Won't fail the run if no CSV was produced (no new jobs)
           if-no-files-found: warn

@@ -7,7 +7,7 @@
 ║  Reads every data/jobs_*.csv, scores each listing      ║
 ║  against Chan's resume/portfolio skill profile, and    ║
 ║  emits a single self-contained interactive dashboard   ║
-║  at docs/index.html (served via GitHub Pages).         ║
+║  at legacy/index.html (reference only).            ║
 ║                                                        ║
 ║  Client-side features (no server needed):              ║
 ║    • search / filter / sort across all days            ║
@@ -25,12 +25,15 @@ import csv
 import glob
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scraper"))   # shared rules live there now
+
 from direct_links import DIRECT_SOURCES, clean_url, is_direct
 from enrich import COMPANY_FILE, ENRICH_FILE, STACK, company_key, is_too_experienced
-from interview_prep import prep_for, prep_text
+from interview_prep import LC, POOLS, TOPIC_LABEL, prep_for, prep_text
 from local_parttime import WORTH_IT_HOURLY, commute
 from job_rules import (
     CATEGORY_LABEL, SWE_CATEGORIES, infer_job_type, is_target_title,
@@ -38,9 +41,9 @@ from job_rules import (
 )
 
 BASE_DIR = Path(__file__).parent
-DATA_DIR = BASE_DIR / "data"
-DOCS_DIR = BASE_DIR / "docs"
-OUT_HTML = DOCS_DIR / "index.html"
+DATA_DIR = BASE_DIR.parent / "scraper" / "data"
+DOCS_DIR = BASE_DIR
+OUT_HTML = BASE_DIR / "index.html"        # gitignored: build it locally to compare with the new app
 LIVE_FILE = DATA_DIR / "live_jobs.json"
 
 # Old CSV source labels that share a live-posting snapshot with a newer source
@@ -337,12 +340,16 @@ def build_html(jobs: list[dict]) -> str:
     companies_json = json.dumps(USED_COMPANIES, ensure_ascii=False).replace("</", "<\\/")
     # same skill vocabulary enrich.py uses on postings, so resumes are read the same way
     vocab_json = json.dumps([[label, rx, "" if label == "R" else "i"] for label, rx in STACK]).replace("</", "<\\/")
+    # LeetCode topic pools: the village's hunters, and the problems that train each one
+    pools_json = json.dumps({t: {"label": TOPIC_LABEL.get(t, t), "problems": [[n, name, LC + slug + "/"] for n, name, slug in pool]}
+                             for t, pool in POOLS.items()}, ensure_ascii=False).replace("</", "<\\/")
 
     return HTML_TEMPLATE \
         .replace("__JOBS_JSON__", jobs_json) \
         .replace("__PREPS_JSON__", preps_json) \
         .replace("__COMPANIES_JSON__", companies_json) \
         .replace("__SKILL_VOCAB__", vocab_json) \
+        .replace("__TOPIC_POOLS__", pools_json) \
         .replace("__GENERATED__", generated) \
         .replace("__LATEST_DAY__", latest_day)
 
@@ -571,7 +578,7 @@ button, input, select { font: inherit; }
 .job h3 a:hover { color: var(--series-1); }
 .meta { color: var(--ink-2); font-size: 13.5px; margin-top: 3px; }
 .meta .co { font-weight: 600; color: var(--ink-1); }
-.meta .dot { color: var(--ink-3); margin: 0 6px; }
+.meta .dot { margin: 0 2px 0 10px; font-size: .9em; }
 .badges { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
   font-size: 11.5px; line-height: 1; padding: 5px 9px; border-radius: 999px;
@@ -873,8 +880,12 @@ button, input, select { font: inherit; }
 .qp-tip { color: rgba(255,255,255,0.85); font-size: 12.5px; margin-top: 6px; text-align: center; max-width: 560px; }
 @media (max-width: 760px) {
   .hud { grid-template-columns: 1fr; }
-  .hud-side { flex-direction: row; }
-  .play-btn { flex: 1; }
+  .hud > * { min-width: 0; }
+  .hud-side { flex-direction: row; flex-wrap: wrap; }
+  .play-btn { flex: 1 1 100%; }
+  .hud-actions { flex: 1 1 100%; }
+  .hud-side > .badge-btn { flex: 1 1 100%; }
+  .hud-title { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .qp-card, .xpbar div { transition: none; } .lvl.pop, .xp-float { animation: none; } }
 @media (max-width: 640px) {
@@ -892,15 +903,138 @@ button, input, select { font: inherit; }
   .my-link button span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* ── 🏰 hunter village ─────────────────────────────────── */
+.vstrip { margin-top: 10px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); overflow: hidden; }
+.vscene { position: relative; height: 150px; cursor: pointer; background: var(--surface-2); }
+.vscene canvas { display: block; width: 100%; height: 100%; }
+.vscene.big { height: 240px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); cursor: default; }
+.vbar { display: flex; gap: 14px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.vchip { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vchip b { color: var(--ink-1); font-weight: 650; }
+.vchip.low b { color: var(--crit); }
+.vopen {
+  margin-left: auto; height: 32px; padding: 0 14px; border-radius: 10px; border: 0; cursor: pointer; font-weight: 700; font-size: 13px;
+  color: #fff; background: linear-gradient(135deg, #1baf7a, var(--series-1)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.vopen:hover { filter: brightness(1.08); }
+.da-pill.on { border-color: var(--good-mark); color: var(--good); }
+.da-pill.on b { color: var(--good); }
+@media (max-width: 640px) { .vscene { height: 120px; } .vchip.opt { display: none; } }
+
+.vil { position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: rgba(8,8,8,0.62); backdrop-filter: blur(6px); padding: 20px 12px 48px; }
+.vil[hidden] { display: none; }
+.vil-box { max-width: 1100px; margin: 0 auto; background: var(--plane); border-radius: 20px; padding: 16px; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5); }
+.vil-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; }
+.vil-res { display: flex; gap: 8px; flex-wrap: wrap; }
+.vil-res > div { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 5px 10px; min-width: 84px; }
+.vil-res .l { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.vil-res .v { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.vil-res .v.low { color: var(--crit); }
+.vil-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; margin-top: 12px; }
+@media (max-width: 860px) { .vil-grid { grid-template-columns: 1fr; } .vscene.big { height: 200px; } }
+.vil-col { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.vcard { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 14px; font-size: 13px; min-width: 0; color: var(--ink-2); }
+.vcard h3 {
+  font-size: 11.5px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px;
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+}
+.vcard h3 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.vcard h4 { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin: 12px 0 4px; }
+.vcard b { color: var(--ink-1); }
+.vcard .lead { font-size: 12px; color: var(--ink-3); margin-bottom: 8px; line-height: 1.45; }
+
+.hgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+.hcard {
+  position: relative; border-radius: 12px; padding: 9px 4px 6px; text-align: center; background: var(--surface-2);
+  border: 1.5px solid var(--border); cursor: pointer; font: inherit; color: inherit; min-width: 0;
+}
+.hcard:hover { border-color: var(--border-strong); }
+.hcard.duty { border-color: var(--good-mark); }
+.hcard.sel { box-shadow: 0 0 0 2px var(--series-1); }
+.hcard.locked .spr { filter: grayscale(1); opacity: .35; }
+.hcard.locked .nm { color: var(--ink-3); }
+.hcard .spr { font-size: 28px; line-height: 1.15; }
+.hcard .nm { font-size: 11.5px; font-weight: 600; line-height: 1.2; margin-top: 2px; color: var(--ink-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hcard .rk { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+.hcard .tier { position: absolute; top: 6px; left: 6px; width: 7px; height: 7px; border-radius: 50%; }
+.hcard .rowtag { position: absolute; top: 3px; right: 5px; font-size: 9px; font-weight: 700; letter-spacing: .05em; color: var(--ink-3); }
+.tier1 { background: #9a9890; } .tier2 { background: #1baf7a; } .tier3 { background: #8b5cf6; }
+.pips { display: flex; gap: 2px; justify-content: center; margin-top: 4px; }
+.pips i { width: 12px; height: 4px; border-radius: 2px; background: var(--grid); }
+.pips i.on { background: var(--warn); }
+.empty-bed { display: grid; place-items: center; border: 1.5px dashed var(--border-strong); border-radius: 12px; color: var(--ink-3); font-size: 11.5px; min-height: 84px; text-align: center; padding: 6px; }
+
+.traits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.trait { display: inline-flex; gap: 5px; align-items: center; font-size: 11.5px; padding: 4px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--border); }
+.trait.on { color: var(--ink-1); background: var(--chip-bg); box-shadow: inset 0 0 0 1px var(--series-1); }
+
+.meter { height: 8px; border-radius: 999px; background: var(--chip-bg); overflow: hidden; margin: 5px 0; }
+.meter div { height: 100%; background: var(--series-1); border-radius: 999px; transition: width .4s; }
+.meter.gold div { background: var(--warn); } .meter.red div { background: var(--crit); } .meter.good div { background: var(--good-mark); }
+.kv2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; margin: 8px 0; }
+.kv2 div { background: var(--surface-2); border-radius: 9px; padding: 5px 8px; }
+.kv2 .l { font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.kv2 .v { font-size: 14px; font-weight: 650; color: var(--ink-1); font-variant-numeric: tabular-nums; }
+
+.zmap { display: flex; gap: 4px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
+.znode { flex: none; width: 58px; text-align: center; font: inherit; font-size: 10px; line-height: 1.2; color: var(--ink-3); cursor: pointer; background: none; border: 0; padding: 0; }
+.znode .dot { width: 40px; height: 40px; margin: 0 auto 4px; border-radius: 50%; display: grid; place-items: center; font-size: 19px; background: var(--surface-2); box-shadow: inset 0 0 0 1.5px var(--border-strong); }
+.znode.here .dot { box-shadow: 0 0 0 3px var(--series-1); background: var(--chip-bg); }
+.znode.here { color: var(--ink-1); font-weight: 600; }
+.znode.next .dot { box-shadow: inset 0 0 0 2px var(--crit); }
+.znode.locked { cursor: default; }
+.znode.locked .dot { filter: grayscale(1); opacity: .4; }
+.boss { display: grid; grid-template-columns: 56px 1fr; gap: 10px; align-items: center; margin-top: 8px; padding: 10px; border-radius: 12px; background: var(--surface-2); }
+.boss .spr { font-size: 40px; text-align: center; line-height: 1; }
+.boss .q { font-size: 12px; margin-top: 2px; }
+.fight-btn {
+  width: 100%; height: 42px; margin-top: 8px; border-radius: 10px; border: 0; cursor: pointer; font-weight: 700; font-size: 14px;
+  color: #fff; background: linear-gradient(135deg, var(--crit), #8b3ad6); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.fight-btn:hover { filter: brightness(1.08); }
+.fight-btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+
+.hint { display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 8px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); margin-bottom: 6px; }
+.hint .ico { font-size: 18px; text-align: center; }
+.hint .txt { color: var(--ink-1); line-height: 1.4; }
+.hint .gain { font-size: 11.5px; color: var(--good); font-weight: 650; white-space: nowrap; text-align: right; }
+.hint .btns { grid-column: 2 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+
+.blds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bld { padding: 8px 10px; border-radius: 10px; background: var(--surface-2); display: grid; gap: 4px; align-content: start; }
+.bld .t { display: flex; justify-content: space-between; gap: 6px; font-weight: 600; color: var(--ink-1); }
+.bld .d { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; }
+.bld .mini { justify-content: center; }
+
+.hdet { display: grid; grid-template-columns: 64px 1fr; gap: 12px; }
+.hdet .spr { font-size: 48px; text-align: center; line-height: 1.1; }
+.hdet .sub2 { color: var(--ink-3); font-size: 12px; }
+.hbtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.gear { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; margin-top: 4px; }
+.plist { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 3px; max-height: 240px; overflow-y: auto; }
+.plist li { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+.plist li.solved a { color: var(--ink-3); text-decoration: line-through; }
+.plist input { accent-color: var(--good-mark); width: 15px; height: 15px; cursor: pointer; }
+.plist a { color: var(--series-1-ink); text-decoration: none; }
+.plist a:hover { text-decoration: underline; }
+.plist .due { font-size: 10.5px; color: var(--warn); font-weight: 600; }
+
+.raid { display: grid; grid-template-columns: 56px 1fr; gap: 10px; align-items: center; }
+.raid .spr { font-size: 42px; text-align: center; line-height: 1; }
+.stackbar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--chip-bg); margin: 6px 0; }
+.stackbar span { height: 100%; }
+.da-big { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--ink-1); }
+.da-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.da-row input { width: 86px; height: 28px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--ink-1); padding: 0 8px; font: inherit; font-size: 12.5px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">Job Hunt · Chan Hen</div>
+    <div class="eyebrow">Chan Hen's job hunt</div>
     <h1>Entry-level SWE &amp; tech roles</h1>
     <div class="summary" id="summary"></div>
-    <div class="sub">Updated __GENERATED__ · latest scrape __LATEST_DAY__ · US only · ranked by skill match, full-time, in-person</div>
+    <div class="sub">Updated __GENERATED__. Latest scrape __LATEST_DAY__. US only, ranked by skill match, full-time first, in-person first.</div>
   </header>
     <section class="hud" id="hud" aria-label="Job hunt progress">
       <div class="hud-player">
@@ -926,11 +1060,21 @@ button, input, select { font: inherit; }
     </section>
     <div class="badges-panel" id="badgesPanel" hidden></div>
     <div class="side-panel" id="sidePanel" hidden></div>
+    <section class="vstrip" id="vStrip" aria-label="Hunter village">
+      <div class="vscene" id="vStripScene" title="Open your village"></div>
+      <div class="vbar">
+        <span class="vchip" id="vGold"></span>
+        <span class="vchip" id="vFood"></span>
+        <span class="vchip opt" id="vRate"></span>
+        <span class="vchip opt" id="vZone"></span>
+        <button class="vopen" id="vOpen">🏰 Village</button>
+      </div>
+    </section>
 
   <div class="tiles" id="tiles"></div>
 
   <div class="chart-card">
-    <div class="chart-head"><h2>New listings per day · last 30 days</h2><span class="max" id="barMax"></span></div>
+    <div class="chart-head"><h2>New listings per day, last 30 days</h2><span class="max" id="barMax"></span></div>
     <div class="bars" id="bars"></div>
     <div class="bar-axis" id="barAxis"></div>
   </div>
@@ -939,6 +1083,7 @@ button, input, select { font: inherit; }
     <div class="sb-top">
       <div class="my-links" id="myLinks" aria-label="My links (tap to copy)"></div>
       <button class="pace" id="paceBtn" title="Applications today and your pace — click for the hourly chart"></button>
+      <button class="pace da-pill" id="daBtn" title="DataAnnotation work timer. Every hour of work earns gold and food for your village."></button>
     </div>
   <div class="tabs" id="tabs"></div>
 
@@ -969,6 +1114,7 @@ button, input, select { font: inherit; }
       <button id="resultsBtn" title="Response rates from your Google Sheet">📈 Results</button>
       <button id="syncBtn" title="Connect your Google Sheet">⚙ Sheet sync</button>
       <button id="exportBtn" title="Download Applied + Saved in your sheet's column order">⬇ Export tracked</button>
+      <button id="backupBtn" title="Download everything this browser has saved (progress, village, answers) to import into the new app">💾 Back up progress</button>
     </div>
   </div>
 
@@ -986,7 +1132,7 @@ button, input, select { font: inherit; }
   <div class="settings" id="settings" hidden>
     <h2>📗 Google Sheets auto-fill</h2>
     <p>When you mark a job <strong>✓ Applied</strong>, a row is added to your tracker sheet
-       (Last Update · Company · Job · Location · Status · Application · Job Type · LeetCode Prep).
+       (Last Update, Company, Job, Location, Status, Application, Job Type, LeetCode Prep).
        Not connected? Use <strong>📋 Copy row</strong> on any job and paste into an empty row of the sheet.
        Once connected, <strong>📈 Results</strong> and <strong>📬 Follow-ups</strong> read your sheet's Status column too
        (needs the version-3 <code>Code.gs</code>).
@@ -1018,8 +1164,15 @@ button, input, select { font: inherit; }
     <button data-act="later">Not yet, save it <small>(↑)</small></button>
     <button class="pass" data-act="nope">✕ Didn't apply, pass <small>(←)</small></button>
   </div>
-  <div class="qp-hint">← pass · ↑ save · → open &amp; apply (then Enter = applied · ↑ save · ← pass) · Esc to exit — plays your current tab &amp; filters</div>
+  <div class="qp-hint">Keys: ← pass, ↑ save, → open and apply. After opening: Enter if you applied, ↑ to save, ← to pass. Esc exits. Uses your current tab and filters.</div>
   <div class="qp-tip" id="qpTip"></div>
+</div>
+<div class="vil" id="vil" hidden role="dialog" aria-modal="true" aria-label="Your hunter village">
+  <div class="vil-box">
+    <div class="vil-top"><div class="vil-res" id="vilRes"></div><button class="mini" id="vilClose">Close</button></div>
+    <div class="vscene big" id="vilScene"></div>
+    <div class="vil-grid"><div class="vil-col" id="vilMain"></div><div class="vil-col" id="vilSide"></div></div>
+  </div>
 </div>
 <canvas id="confetti"></canvas>
 
@@ -1050,6 +1203,7 @@ function setStatus(id, s, opts) {
     game.times = [...game.times, new Date().getHours()].slice(-50);
     const job = JOBS.find(j => j.id === id);
     if (job) syncToSheet(job);
+    foodFloat(4);
   }
   if (!(opts && opts.quiet)) floatXP(statusXP(prev, s));
   render();
@@ -1193,8 +1347,8 @@ function onePerCompany(rows, k) {
     if (seen[k] > PER_COMPANY) { capped++; return false; }
     return true;
   }));
-  if (k === tab && cooled) companyNote += ` · ${cooled} hidden from companies you applied to in the last 6 months`;
-  if (k === tab && capped) companyNote += ` · ${capped} more from companies already shown twice`;
+  if (k === tab && cooled) companyNote += `. ${cooled} hidden because you applied to those companies in the last 6 months`;
+  if (k === tab && capped) companyNote += `. ${capped} more hidden from companies already shown twice`;
   return rows.filter(j => keep.has(j));
 }
 
@@ -1217,7 +1371,7 @@ function render() {
   document.getElementById("countNote").textContent = "Showing " +
     rows.length + (jobType && jobType !== "?" ? " " + jobType.toLowerCase() : "") +
     " listing" + (rows.length === 1 ? "" : "s") +
-    (tab === "new" ? " found today (" + LATEST + ")" : "") + companyNote;
+    (tab === "new" ? " found today (" + LATEST + ")" : "") + companyNote + ".";
   const list = document.getElementById("list");
   list.innerHTML = rows.slice(0, shown).map(card).join("") ||
     '<div class="empty">Nothing here — try another tab, job type, or clear the search.</div>';
@@ -1241,7 +1395,7 @@ function cardBadges(j) {
     fitChip(j),
     j.gradWindow ? '<span class="chip flag-warn" title="New-grad posting — check the required graduation window; many also accept grads within 12–24 months">⚠ check grad window</span>' : "",
     ...j.chips.map(c => '<span class="chip">' + esc(c) + "</span>"),
-    '<span class="chip muted">' + esc(j.source) + " · " + esc(j.date) + "</span>",
+    '<span class="chip muted">' + esc(j.source) + ", " + esc(j.date) + "</span>",
   ].join("");
 }
 
@@ -1253,7 +1407,7 @@ function card(j) {
     <div class="score ${j.score >= 10 ? "hot" : ""}" title="Match score: skills, entry-level, full-time, in-person, direct company link">${j.score}<small>match</small></div>
     <div>
       <h3><a href="${esc(j.direct || j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></h3>
-      <div class="meta"><span class="co">${esc(j.company) || "—"}</span><span class="dot">·</span>${esc(j.location)}</div>
+      <div class="meta"><span class="co">${esc(j.company) || "—"}</span><span class="dot">📍</span>${esc(j.location)}</div>
       <div class="badges">${badges}</div>
       <div class="actions">
         <button class="${s === "applied" ? "on-applied" : ""}" onclick="setStatus('${j.id}','${s === "applied" ? "" : "applied"}')">✓ Applied${s === "applied" && statusMap[j.id] ? " " + statusMap[j.id].t.slice(5) : ""}</button>
@@ -1368,9 +1522,9 @@ function renderTiles() {
   const count = k => JOBS.reduce((c, j) => c + (matchesTab(j, k) ? 1 : 0), 0);
   const open = JOBS.filter(j => matchesTab(j, "all"));
   document.getElementById("summary").innerHTML =
-    `<strong class="num">${count("new")}</strong> new today · ` +
-    `<strong class="num">${open.filter(j => j.jobType === "Full-time").length}</strong> full-time · ` +
-    `<strong class="num">${count("direct")}</strong> with a direct company link · ` +
+    `<strong class="num">${count("new")}</strong> new today, ` +
+    `<strong class="num">${open.filter(j => j.jobType === "Full-time").length}</strong> full-time, ` +
+    `<strong class="num">${count("direct")}</strong> with a direct company link, ` +
     `<strong class="num">${count("applied")}</strong> applied`;
   const t = [["all", "Open jobs"], ["new", "New today"], ["direct", "Direct link"], ["onsite", "In-person"],
              ["remote", "Remote"], ["parttime", "Local part-time"], ["saved", "Saved"], ["applied", "Applied"]];
@@ -1397,7 +1551,7 @@ function renderChart() {
   const max = Math.max(...days.map(d => byDay[d]), 1);
   document.getElementById("bars").innerHTML = days.map(d =>
     `<div class="bar" style="height:${Math.max(4, Math.round(byDay[d] / max * 68))}px">
-       <span class="tip">${d} · ${byDay[d]} jobs</span></div>`
+       <span class="tip">${d}: ${byDay[d]} jobs</span></div>`
   ).join("");
   document.getElementById("barMax").textContent = "peak " + max + "/day";
   document.getElementById("barAxis").innerHTML =
@@ -1418,6 +1572,22 @@ document.getElementById("exportBtn").onclick = () => {
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = "tracked_jobs.csv";
   a.click();
+};
+
+/* ── 💾 full backup of this browser's saved progress, for the new app's import ── */
+document.getElementById("backupBtn").onclick = () => {
+  if (typeof settle === "function") { settle(); saveGame(); }
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("chan-")) data[k] = localStorage.getItem(k);
+  }
+  const blob = { app: "chan-job-hunt", version: 1, exportedAt: new Date().toISOString(), from: location.origin, data };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(blob)], { type: "application/json" }));
+  a.download = `job-hunt-backup-${localDay()}.json`;
+  a.click();
+  toast(`💾 Saved a backup of ${Object.keys(data).length} items. Import it in the new app.`);
 };
 
 /* ── wire controls ────────────────────────────────────────── */
@@ -1516,6 +1686,11 @@ const BADGES = [
   ["spaced",  "🔁", "Spaced Out",      "Finish 10 LeetCode reviews",          s => s.reviews >= 10],
   ["boss",    "🎤", "Boss Battle",     "Land an interview (from your sheet)", s => s.interviews >= 1],
   ["offer",   "👑", "Offer!",          "Get an offer (from your sheet)",      s => s.offers >= 1],
+  ["squad",   "🧑‍🤝‍🧑", "Full Roster",     "Recruit 10 hunters (LeetCode topics)", s => s.hunters >= 10],
+  ["deep",    "🗺️", "Deep Hunter",     "Unlock hunting zone 4",               s => s.zones >= 4],
+  ["chief",   "🏰", "Village Chief",   "Upgrade a building to level 3",       s => s.bldMax >= 3],
+  ["raid",    "🐲", "Raid Slayer",     "Defeat a weekly world boss",          s => s.raidWins >= 1],
+  ["contract","💼", "Contractor",      "Log 10 hours of DataAnnotation",      s => s.daHours >= 10],
 ];
 
 function localDay(d) {
@@ -1554,6 +1729,12 @@ function gameStats() {
   const sh = (game.sheet && game.sheet.rows && game.sheet.rows.length) ? sheetStats() : { c: { interview: 0, offer: 0 } };
   s.interviews = sh.c.interview + sh.c.offer;
   s.offers = sh.c.offer;
+  const vg = game.village || {}, da = game.da || { sess: [] };
+  s.daHours = da.sess.reduce((a, x) => a + x.m, 0) / 60;
+  s.zones = vg.unlocked || 1;
+  s.raidWins = Object.keys(vg.raids || {}).length;
+  s.bldMax = Math.max(1, ...Object.values(vg.bld || {}));
+  s.hunters = HKEYS.filter(trained).length;
   s.lcToday = s.solvedToday + ((game.revDays || {})[today] || 0);
   s.netToday = ((game.outDays || {})[today] || 0) + ((game.fuDays || {})[today] || 0);
   s.quests = [
@@ -1565,7 +1746,7 @@ function gameStats() {
   s.xp = s.applied * 50 + s.saved * 10 + s.solved * 20 + game.triaged * 2 +
          s.clears * 50 + Object.keys(game.unlocked).length * 25 +
          s.outreach * 30 + s.followed * 15 + s.reviews * 10 +
-         s.interviews * 200 + s.offers * 1000;
+         s.interviews * 200 + s.offers * 1000 + Math.floor(s.daHours) * 10;
   return s;
 }
 
@@ -1594,9 +1775,12 @@ function checkProgress() {
     }, fresh.length ? 1400 : 200);
   }
   game.lastLevel = lvl;
+  villageCheck(quiet);
   game.init = true;
   saveGame();
   renderHUD(s);
+  renderVillageChips();
+  renderVillage();
 }
 
 function renderHUD(s) {
@@ -1610,7 +1794,7 @@ function renderHUD(s) {
   const wrap = document.getElementById("hudBarWrap");
   wrap.setAttribute("aria-valuenow", pct); wrap.setAttribute("aria-valuemin", 0); wrap.setAttribute("aria-valuemax", 100);
   document.getElementById("hudNext").textContent =
-    `${(hi - s.xp).toLocaleString()} XP to Lv ${lvl + 1} · 🎤 interview +200 · ✓ applied +50 · 🤝 outreach +30 · 🧠 solved +20 · 📬 follow-up +15`;
+    `${(hi - s.xp).toLocaleString()} XP to level ${lvl + 1}. Applying earns 50, solving 20, outreach 30, an interview 200.`;
   const nFu = typeof followUps === "function" ? followUps().length : 0;
   const nRev = typeof dueReviews === "function" ? dueReviews().length : 0;
   document.getElementById("fuN").innerHTML = nFu ? `<span class="dot-n">${nFu}</span>` : "";
@@ -1675,7 +1859,7 @@ function toggleSolved(n, el) {
   else {
     game.solved[n] = localDay();
     game.rev[n] = { s: 0, due: addDays(localDay(), REVIEW_GAPS[0]) };   // first spaced review
-    floatXP(20); if (!REDUCED) confetti(24);
+    floatXP(20); foodFloat(2); if (!REDUCED) confetti(24);
   }
   saveGame();
   render();
@@ -1717,7 +1901,7 @@ function qpShow() {
     <div class="top">
       <div>
         <h3>${esc(j.title)}</h3>
-        <div class="meta"><span class="co">${esc(j.company) || "—"}</span><span class="dot">·</span>${esc(j.location)}</div>
+        <div class="meta"><span class="co">${esc(j.company) || "—"}</span><span class="dot">📍</span>${esc(j.location)}</div>
       </div>
       <div class="score ${j.score >= 10 ? "hot" : ""}">${j.score}<small>match</small></div>
     </div>
@@ -1803,7 +1987,7 @@ function refPanel(j) {
     </div>
     <textarea id="msg-${j.id}" oninput="msgCount('${j.id}')">${esc(msg)}</textarea>
     <div class="row2">
-      <span class="cc ${msg.length > 300 ? "over" : ""}" id="cc-${j.id}">${msg.length}/300 · LinkedIn connection notes max out at 300</span>
+      <span class="cc ${msg.length > 300 ? "over" : ""}" id="cc-${j.id}">${msg.length} of 300 characters. LinkedIn connection notes max out at 300.</span>
       <span>
         <button class="mini" onclick="copyText(document.getElementById('msg-${j.id}').value, '📋 Message copied — paste it into LinkedIn')">📋 Copy message</button>
         <button class="mini ${sent ? "ok" : "primary"}" onclick="toggleOutreach('${j.id}')">${sent ? "✓ Reached out " + sent.slice(5) : "✉ I reached out (+30 XP)"}</button>
@@ -1813,12 +1997,12 @@ function refPanel(j) {
 }
 function msgCount(id) {
   const n = document.getElementById("msg-" + id).value.length, el = document.getElementById("cc-" + id);
-  el.textContent = `${n}/300 · LinkedIn connection notes max out at 300`; el.classList.toggle("over", n > 300);
+  el.textContent = `${n} of 300 characters. LinkedIn connection notes max out at 300.`; el.classList.toggle("over", n > 300);
 }
 function bump(map, key) { map[key] = (map[key] || 0) + 1; }
 function toggleOutreach(id) {
   if (game.outreach[id]) { delete game.outreach[id]; floatXP(-30); }
-  else { game.outreach[id] = localDay(); bump(game.outDays, localDay()); floatXP(30); confetti(30); }
+  else { game.outreach[id] = localDay(); bump(game.outDays, localDay()); floatXP(30); foodFloat(2); confetti(30); }
   saveGame(); render();
 }
 function copyText(text, msg) {
@@ -1988,7 +2172,7 @@ function markReviewed(n) {
   r.s += 1;
   r.due = r.s < REVIEW_GAPS.length ? addDays(localDay(), REVIEW_GAPS[r.s]) : null;   // null = mastered
   game.rev[n] = r; game.reviews += 1; bump(game.revDays, localDay());
-  floatXP(10); saveGame(); openSide("reviews");
+  floatXP(10); foodFloat(1); saveGame(); openSide("reviews");
 }
 
 /* ── 📬 follow-ups: applications 7+ days old, no reply yet ─── */
@@ -2022,7 +2206,7 @@ function followMsg(f) {
 }
 function markFollowed(key, how) {
   game.followed[key] = { d: localDay(), how };
-  if (how === "done") { bump(game.fuDays, localDay()); floatXP(15); }
+  if (how === "done") { bump(game.fuDays, localDay()); floatXP(15); foodFloat(2); }
   saveGame(); openSide("followups");
 }
 
@@ -2127,7 +2311,7 @@ function resultsHTML() {
   const table = (title, list) => `<div><h3>${title}</h3>${list.map(([k, v]) => {
     const r = v.decided ? v.pos / v.decided : 0;
     return `<div class="rrow"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${Math.max(r ? 4 : 0, Math.round(r * 100))}%"></div></div>
-      <span class="num">${v.decided ? `${v.pos}/${v.decided} got interviews` : `${v.n} waiting`}${v.n < 5 ? ' <span class="small">· small sample</span>' : ""}</span></div>`;
+      <span class="num">${v.decided ? `${v.pos}/${v.decided} got interviews` : `${v.n} waiting`}${v.n < 5 ? ' <span class="small">(small sample)</span>' : ""}</span></div>`;
   }).join("")}</div>`;
   const byChannel = breakdown(rows, r => channelOf(r.url));
   const best = byChannel.filter(([, v]) => v.decided >= 5).sort((a, b) => b[1].pos / b[1].decided - a[1].pos / a[1].decided)[0];
@@ -2164,7 +2348,7 @@ function openSide(view) {
     p.innerHTML = `<h2>📬 Follow-ups due <button class="mini" onclick="closeSide()">Close</button></h2>
       <div class="lead">Applications ${FOLLOW_UP_DAYS}+ days old with no reply. A short, polite nudge to the recruiter (or the person you messaged) revives a surprising number. ✓ Followed up: +15 XP.</div>
       <div class="fu-list">${list.length ? list.map(f => `
-        <div class="fu"><div><b>${esc(f.company)}</b> · ${esc(f.title)}<div class="sub2">Applied ${f.date} · ${f.days} days ago</div></div>
+        <div class="fu"><div><b>${esc(f.company)}</b>, ${esc(f.title)}<div class="sub2">Applied ${f.date}, ${f.days} days ago</div></div>
           <div class="btns">
             <a class="mini" href="${esc(liSearch(f.company + " recruiter"))}" target="_blank" rel="noopener">🧑‍💼 Find recruiter</a>
             <button class="mini" onclick="copyText(${esc(JSON.stringify(followMsg(f)))}, '📋 Follow-up message copied')">📋 Message</button>
@@ -2176,7 +2360,7 @@ function openSide(view) {
     p.innerHTML = `<h2>🔁 LeetCode reviews due <button class="mini" onclick="closeSide()">Close</button></h2>
       <div class="lead">Solved problems come back after 3, 7 and 14 days so they stick for interviews. Re-solve from scratch (no peeking), then mark it: +10 XP.</div>
       <div class="fu-list">${list.length ? list.map(r => `
-        <div class="fu"><div><b>#${r.n} ${esc(r.name)}</b><div class="sub2">Review ${r.stage + 1} of ${REVIEW_GAPS.length} · due ${r.due}</div></div>
+        <div class="fu"><div><b>#${r.n} ${esc(r.name)}</b><div class="sub2">Review ${r.stage + 1} of ${REVIEW_GAPS.length}, due ${r.due}</div></div>
           <div class="btns"><a class="mini primary" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>
           <button class="mini ok" onclick="markReviewed(${r.n})">✓ Reviewed</button></div></div>`).join("")
         : '<div class="lead">Nothing due. Solve problems from any job\'s 🧠 prep panel and they\'ll show up here on schedule.</div>'}</div>`;
@@ -2243,8 +2427,8 @@ function fitChip(j) {
   if (!f) return "";
   const b = f.best, label = shortName(b.r.name);
   const tip = f.need.length ? `Covers ${b.have.length} of the ${f.need.length} skills this posting names` +
-    (b.missing.length ? ` · not on it: ${b.missing.join(", ")}` : "") : "Best match for this role type";
-  return `<span class="chip flag-res" title="${esc(tip)}">📄 ${esc(label)}${f.need.length ? ` · ${b.have.length}/${f.need.length}` : ""}</span>`;
+    (b.missing.length ? `. Not on it: ${b.missing.join(", ")}` : "") : "Best match for this role type";
+  return `<span class="chip flag-res" title="${esc(tip)}">📄 ${esc(label)}${f.need.length ? `, ${b.have.length} of ${f.need.length} skills` : ""}</span>`;
 }
 function fitBox(j) {
   const f = fitFor(j);
@@ -2367,14 +2551,13 @@ function paceStats() {
 function barsHTML(vals, labels, unit) {
   const max = Math.max(...vals, 1);
   return vals.map((v, i) => `<div class="bar" style="height:${v ? Math.max(4, Math.round(v / max * 52)) : 0}px">
-    <span class="tip">${labels[i]} · ${v} ${unit}${v === 1 ? "" : "s"}</span></div>`).join("");
+    <span class="tip">${labels[i]}: ${v} ${unit}${v === 1 ? "" : "s"}</span></div>`).join("");
 }
 function renderPace() {
   const p = paceStats();
   document.getElementById("paceBtn").innerHTML =
-    `✓ <b>${p.todayCount}</b> applied today <span class="sep">·</span> ` +
-    `<span class="opt">${p.lastHour} in last hr <span class="sep">·</span></span> ` +
-    `${p.perHr.toFixed(1)}/hr<span class="opt"> <span class="sep">·</span> ${p.avgMin ? "~" + Math.round(p.avgMin) + " min each" : "— min each"}</span>`;
+    `✓ <b>${p.todayCount}</b> applied today<span class="opt">, <b>${p.lastHour}</b> in the last hour, ` +
+    `${p.avgMin ? "about " + Math.round(p.avgMin) + " min each" : p.perHr.toFixed(1) + " an hour"}</span>`;
   const panel = document.getElementById("pacePanel");
   if (panel.hidden) return;
   const hourLbl = h => (h % 12 || 12) + (h < 12 ? "am" : "pm");
@@ -2412,7 +2595,7 @@ setInterval(renderPace, 60000);           // "last hour" and pace age with the c
   addEventListener("scroll", onScroll, { passive: true }); onScroll();
   top.onclick = () => scrollTo({ top: 0, behavior: REDUCED ? "auto" : "smooth" });
   document.addEventListener("keydown", e => {
-    if (!document.getElementById("qp").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!document.getElementById("qp").hidden || !document.getElementById("vil").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) {
       if (e.key === "Escape") document.activeElement.blur();
       return;
@@ -2433,14 +2616,1054 @@ setInterval(renderPace, 60000);           // "last hour" and pace age with the c
 function driveChips(j) {
   const d = j.drive;
   if (!d) return "";
-  const out = [`<span class="chip flag-src" title="From Shakopee: ~${d.mi} road miles each way, ~${d.min} min round trip, ~$${d.cost.toFixed(2)} gas + wear per shift">🚗 ${Math.round(d.mi)} mi · $${d.cost.toFixed(2)}/shift · ${d.min} min RT</span>`];
+  const out = [`<span class="chip flag-src" title="From Shakopee: ~${d.mi} road miles each way, ~${d.min} min round trip, ~$${d.cost.toFixed(2)} gas + wear per shift">🚗 ${Math.round(d.mi)} mi, $${d.cost.toFixed(2)} a shift, ${d.min} min round trip</span>`];
   if (d.eff != null) {
-    out.push(`<span class="chip ${d.ok ? "type-ft" : "flag-warn"}" title="Pays $${d.pay.toFixed(2)}/hr. Over a ${4}-hour shift, after gas and counting drive time: $${d.eff.toFixed(2)}/hr">💵 $${d.eff.toFixed(2)}/hr after driving${d.ok ? "" : " · borderline"}</span>`);
+    out.push(`<span class="chip ${d.ok ? "type-ft" : "flag-warn"}" title="Pays $${d.pay.toFixed(2)}/hr. Over a ${4}-hour shift, after gas and counting drive time: $${d.eff.toFixed(2)}/hr">💵 $${d.eff.toFixed(2)}/hr after driving${d.ok ? "" : " (borderline)"}</span>`);
   } else {
     out.push('<span class="chip flag-src" title="The posting doesn\'t list pay — check it before driving far">💵 pay not listed</span>');
   }
   return out.join("");
 }
+
+/* ═══ 🏰 HUNTER VILLAGE — an idle game that only real work can feed ════
+   Hunters are LeetCode topics. Solve a problem in a topic to recruit that
+   hunter; more solves and spaced reviews rank it up (I to IV). Hunters on
+   duty hunt by themselves, even while this tab is closed, but they eat:
+   🍖 food comes from applications, solves, reviews, outreach, follow-ups,
+   cleared quests and DataAnnotation hours (clearing every daily quest is
+   about a full day of hunting). Hunting and DataAnnotation earn 🪙 gold
+   for gear and buildings. Each zone ends in a boss fight that plays out
+   on its own: who you bring and where they stand decides it. Like XP,
+   food is derived from real progress, so un-marking something takes its
+   food back.                                                            */
+const TOPIC_POOLS = __TOPIC_POOLS__;
+const TOPIC_OF = {};
+Object.entries(TOPIC_POOLS).forEach(([t, p]) => p.problems.forEach(([n, name, url]) => {
+  TOPIC_OF[n] = t;
+  if (!PROBLEM_INFO[n]) PROBLEM_INFO[n] = { name, url };
+}));
+
+// topic → [sprite, name, tier, origin trait, class]
+const HUNTER_DEFS = {
+  hashing:        ["🗝️", "Hash Knight",     1, "arrays",    "guardian"],
+  two_pointers:   ["🥢", "Twin Pointer",    1, "arrays",    "striker"],
+  sliding_window: ["🪟", "Window Ranger",   2, "arrays",    "striker"],
+  binary_search:  ["🔍", "Binary Seeker",   2, "arrays",    "swift"],
+  intervals:      ["📏", "Interval Archer", 2, "arrays",    "sniper"],
+  matrix:         ["🔲", "Grid Walker",     2, "arrays",    "sniper"],
+  stack:          ["🥞", "Stack Golem",     1, "structs",   "guardian"],
+  linked_list:    ["🔗", "Link Chain",      1, "structs",   "swift"],
+  heap:           ["⛰️", "Heap Titan",      2, "structs",   "guardian"],
+  design:         ["🏗️", "Architect",       3, "structs",   "guardian"],
+  trees:          ["🌳", "Tree Warden",     2, "recursion", "guardian"],
+  graphs:         ["🕸️", "Graph Weaver",    3, "recursion", "striker"],
+  backtracking:   ["🧭", "Backtrack Rogue", 3, "recursion", "sniper"],
+  dp:             ["🧩", "DP Sage",         3, "recursion", "striker"],
+  strings:        ["🔤", "Trie Scribe",     1, "text",      "sniper"],
+  parsing:        ["📜", "Log Parser",      2, "text",      "swift"],
+  js:             ["🟨", "JS Imp",          1, "text",      "striker"],
+  sql:            ["🗄️", "SQL Oracle",      1, "data",      "guardian"],
+  pandas:         ["🐼", "Panda Monk",      1, "data",      "swift"],
+  math:           ["➗", "Bit Mage",        1, "data",      "sniper"],
+};
+const H = {};
+Object.entries(HUNTER_DEFS).forEach(([k, [ico, name, tier, origin, cls]]) => {
+  if (TOPIC_POOLS[k]) H[k] = { k, ico, name, tier, origin, cls, label: TOPIC_POOLS[k].label };
+});
+const HKEYS = Object.keys(H);
+const TIER_NAME = ["", "Common", "Rare", "Epic"];
+
+const CLASSES = {
+  guardian: { ico: "🛡️", name: "Guardian", atk: 0.7,  hp: 1.6,  spd: 1,   crit: 0,    note: "Tough. Put them in the front row." },
+  striker:  { ico: "⚔️", name: "Striker",  atk: 1.35, hp: 0.85, spd: 1,   crit: 0,    note: "Hits hard." },
+  swift:    { ico: "💨", name: "Swift",    atk: 0.8,  hp: 0.9,  spd: 1.4, crit: 0,    note: "Attacks fast and never misses." },
+  sniper:   { ico: "🎯", name: "Sniper",   atk: 1,    hp: 0.8,  spd: 1,   crit: 0.15, note: "Lands more critical hits." },
+};
+const TRAITS = {
+  arrays:    { ico: "🧮", name: "Arrays",     at: [2, 4, 6], fx: [0.10, 0.25, 0.45], what: "Whole party deals {} more damage" },
+  structs:   { ico: "🧱", name: "Structures", at: [2, 4],    fx: [0.15, 0.35],       what: "Whole party has {} more HP" },
+  recursion: { ico: "🌀", name: "Recursion",  at: [2, 4],    fx: [0.10, 0.25],       what: "Whole party gets {} more crit chance" },
+  text:      { ico: "✒️", name: "Text",       at: [2, 3],    fx: [0.12, 0.25],       what: "Whole party attacks {} faster" },
+  data:      { ico: "📊", name: "Data",       at: [2, 3],    fx: [0.15, 0.35],       what: "Hunting earns {} more gold" },
+  guardian:  { ico: "🛡️", name: "Guardian",   at: [2, 4],    fx: [0.30, 0.70],       what: "Guardians get {} more HP" },
+  striker:   { ico: "⚔️", name: "Striker",    at: [2, 4],    fx: [0.25, 0.60],       what: "Strikers deal {} more damage" },
+  swift:     { ico: "💨", name: "Swift",      at: [2, 4],    fx: [0.30, 0.70],       what: "Swift hunters attack {} faster" },
+  sniper:    { ico: "🎯", name: "Sniper",     at: [2, 4],    fx: [0.60, 1.40],       what: "Sniper crits hit {} harder" },
+};
+const pct = x => Math.round(x * 100) + "%";
+const RANK_AT = [1, 3, 8, 16], RANK_MULT = [0, 1, 1.7, 2.8, 4.5], RANK_NAME = ["", "I", "II", "III", "IV"];
+const rankOf = c => RANK_AT.filter(a => c >= a).length;
+
+// boss quirks: [label, what it does, what beats it]
+const QUIRKS = {
+  "":     ["No tricks", "A straight fight.", "a bigger party"],
+  ghost:  ["👻 Elusive", "30% of attacks miss. Swift hunters never miss.", "Swift hunters"],
+  armor:  ["🛡️ Armored", "Normal hits deal 40% less. Critical hits ignore armor.", "crits from Snipers and Recursion"],
+  enrage: ["⏱️ Timed", "You get 15 seconds instead of 30.", "raw damage from Strikers, Arrays and weapons"],
+  slam:   ["💥 Slam", "Every 3rd attack hits the whole party.", "HP from Guardians, Structures and armor"],
+  regen:  ["💚 Regen", "Heals 2.5% of its max HP every second.", "burst damage from Strikers and Snipers"],
+  frost:  ["🧊 Frost", "Your party attacks 30% slower.", "Swift and Text hunters"],
+  thorns: ["🌵 Thorns", "Every hit reflects 20% of its damage back.", "HP from Guardians, Structures and armor"],
+};
+// [zone name, field monsters, [boss sprite, boss name, quirk]]
+const ZONES = [
+  ["Application Fields",    ["📄", "🤖"], ["📞", "Recruiter Gatekeeper", "slam"]],
+  ["Ghostwood",             ["👻", "🕳️"], ["🫥", "The Ghoster", "ghost"]],
+  ["OA Caverns",            ["⏱️", "🦇"], ["🐍", "HackerRank Hydra", "enrage"]],
+  ["Keyword Desert",        ["🔑", "🦂"], ["🗿", "Keyword Filter Golem", "armor"]],
+  ["Phone Screen Pass",     ["☎️", "🐺"], ["🧊", "The Hiring Freeze", "frost"]],
+  ["Whiteboard Ruins",      ["🖊️", "🐢"], ["👹", "The 5+ Years Required Ogre", "thorns"]],
+  ["Behavioral Bog",        ["🗣️", "🐸"], ["🌀", "Edge Case Swarm", "regen"]],
+  ["System Design Spire",   ["🧱", "🦅"], ["🗼", "System Design Titan", "armor"]],
+  ["Hiring Committee Keep", ["⚖️", "🦉"], ["🐉", "Hiring Committee Dragon", "slam"]],
+];
+function zoneDef(z) {
+  const i = (z - 1) % ZONES.length, lap = Math.floor((z - 1) / ZONES.length);
+  const [name, mobs, [bi, bn, quirk]] = ZONES[i];
+  const suf = lap ? " " + (["II", "III", "IV", "V"][lap - 1] || "V+") : "";
+  return { z, name: name + suf, mobs, boss: { ico: bi, name: bn + suf, quirk } };
+}
+// what a zone asks of a party, and what it pays an efficient one per hour
+const zoneNeed = z => {
+  const g = Math.pow(1.55, z - 1);
+  return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.45, z - 1) };
+};
+function bossOf(z) {
+  const d = zoneDef(z), n = zoneNeed(z);
+  return { ...d.boss, z, hp: n.dps * 22, atk: n.hp * 0.07, spd: 0.7 };
+}
+// every boss has a good or bad day, so a fight is never a sure thing
+const rollBoss = b => ({ ...b, hp: b.hp * (0.75 + 0.5 * Math.random()), atk: b.atk * (0.85 + 0.3 * Math.random()) });
+
+const BUILDINGS = {
+  inn:     { ico: "🏨", name: "Inn",     max: 6, base: 40, g: 2.2, what: lv => `${2 + lv} hunters can be on duty` },
+  kitchen: { ico: "🍲", name: "Kitchen", max: 5, base: 30, g: 2.4, what: lv => lv > 1 ? `Food lasts ${pct(0.25 * (lv - 1))} longer` : "Food lasts the normal time" },
+  forge:   { ico: "⚒️", name: "Forge",   max: 6, base: 35, g: 2.3, what: lv => `Gear can reach level ${5 * lv}` },
+  market:  { ico: "🏪", name: "Market",  max: 8, base: 50, g: 2.0, what: lv => lv > 1 ? `Hunting earns ${pct(0.15 * (lv - 1))} more gold` : "Hunting earns the base rate" },
+};
+const bldCost = (b, lv) => Math.round(BUILDINGS[b].base * Math.pow(BUILDINGS[b].g, lv - 1));
+const gearCost = lv => Math.round(10 * Math.pow(1.32, lv));
+
+/* ── state ─────────────────────────────────────────────────── */
+const VILLAGE0 = {
+  born: "", last: 0, eaten: 0, bossFood: 0, bonusFood: 0, hunted: 0, raidGold: 0, spent: 0,
+  party: [], row: {}, gear: {}, bld: { inn: 1, kitchen: 1, forge: 1, market: 1 },
+  zone: 1, unlocked: 1, seen: {}, raids: {}, raidNote: "", sel: "", boss: { tries: 0, wins: 0 },
+};
+game.village = Object.assign(JSON.parse(JSON.stringify(VILLAGE0)), game.village || {});
+game.village.bld = Object.assign({ ...VILLAGE0.bld }, game.village.bld);
+game.da = Object.assign({ sess: [], run: 0, rate: "" }, game.da || {});
+const V = game.village, DA = game.da;
+
+const beds = () => 2 + V.bld.inn;
+const burnRate = () => 1 / (1 + 0.25 * (V.bld.kitchen - 1));     // food eaten per hour of hunting
+const gearOf = k => V.gear[k] || { w: 0, a: 0 };
+const rowOf = k => V.row[k] || (H[k].cls === "guardian" ? "front" : "back");
+function trainingOf(k) {      // solves + reviews in this topic
+  let c = 0;
+  for (const n in game.solved) if (TOPIC_OF[n] === k) c += 1 + ((game.rev[n] || {}).s || 0);
+  return c;
+}
+const trained = k => trainingOf(k) > 0;
+const daMinutes = list => (list || DA.sess).reduce((a, s) => a + s.m, 0);
+
+function foodEarned() {
+  const apps = Object.values(statusMap).filter(v => v.s === "applied").length;
+  return apps * 4 + Object.keys(game.solved).length * 2 + (game.reviews || 0) +
+    Object.keys(game.outreach || {}).length * 2 +
+    Object.values(game.followed || {}).filter(f => f.how === "done").length * 2 +
+    Object.keys(game.clears || {}).length * 6 + daMinutes() / 60;
+}
+const foodLeft = () => foodEarned() + V.bonusFood - V.eaten - V.bossFood;
+const huntHours = () => Math.max(0, foodLeft()) / burnRate();
+const goldNow = () => V.hunted + V.raidGold + DA.sess.reduce((a, s) => a + (s.g || 0), 0) - V.spent;
+
+/* ── party math ────────────────────────────────────────────── */
+let cmdCache = { at: 0, v: 1 };
+function cmdMult() {        // your XP level makes every hunter 2% stronger per level
+  if (Date.now() - cmdCache.at > 2000) cmdCache = { at: Date.now(), v: 1 + 0.02 * (levelFor(gameStats().xp) - 1) };
+  return cmdCache.v;
+}
+const traitLv = (t, n) => TRAITS[t].at.filter(a => n >= a).length;
+const traitFx = (t, tc) => { const lv = traitLv(t, tc[t] || 0); return lv ? TRAITS[t].fx[lv - 1] : 0; };
+function traitCounts(party) {
+  const tc = {};
+  party.forEach(k => { const h = H[k]; tc[h.origin] = (tc[h.origin] || 0) + 1; tc[h.cls] = (tc[h.cls] || 0) + 1; });
+  return tc;
+}
+// over: { topic: training count } to ask "what if I solved more?"
+function partyUnits(party, over) {
+  over = over || {};
+  const train = k => over[k] !== undefined ? over[k] : trainingOf(k);
+  party = (party || V.party).filter(k => H[k] && train(k) > 0);
+  const tc = traitCounts(party), cmd = cmdMult();
+  const units = party.map(k => {
+    const h = H[k], c = CLASSES[h.cls], r = rankOf(train(k)), g = gearOf(k), fx = t => traitFx(t, tc);
+    const m = RANK_MULT[r] * (1 + 0.25 * (h.tier - 1)) * cmd;
+    return {
+      k, cls: h.cls, rank: r, row: rowOf(k),
+      atk: 22 * c.atk * m * (1 + 0.15 * g.w) * (1 + fx("arrays") + (h.cls === "striker" ? fx("striker") : 0)),
+      hp: 160 * c.hp * m * (1 + 0.15 * g.a) * (1 + fx("structs") + (h.cls === "guardian" ? fx("guardian") : 0)),
+      spd: 0.85 * c.spd * (1 + fx("text") + (h.cls === "swift" ? fx("swift") : 0)),
+      crit: Math.min(0.9, 0.1 + c.crit + fx("recursion")),
+      cdmg: 1.5 + (h.cls === "sniper" ? fx("sniper") : 0),
+    };
+  });
+  const dps = units.reduce((a, u) => a + u.atk * u.spd * (1 + u.crit * (u.cdmg - 1)), 0);
+  const hp = units.reduce((a, u) => a + u.hp, 0);
+  return { units, tc, dps, hp, power: Math.round(Math.sqrt(dps * hp)) };
+}
+function efficiency(p, z) {
+  if (!p.units.length) return 0;
+  const n = zoneNeed(z);
+  return Math.max(0.05, Math.pow(Math.min(1, p.dps / n.dps), 0.8) * Math.pow(Math.min(1, p.hp / n.hp), 0.5));
+}
+function goldPerHour(p, z) {
+  p = p || partyUnits(); z = z || V.zone;
+  return zoneNeed(z).gph * efficiency(p, z) * (1 + 0.15 * (V.bld.market - 1) + traitFx("data", p.tc));
+}
+
+/* ── idle accrual: hunters hunt while there's food, tab open or not ── */
+function settle(now) {
+  now = now || Date.now();
+  if (!V.last || now < V.last) { V.last = now; return null; }
+  const hrs = (now - V.last) / 3600e3;
+  V.last = now;
+  const rate = goldPerHour();
+  if (!rate || hrs <= 0) return null;
+  const h = Math.max(0, Math.min(hrs, huntHours()));
+  V.eaten += h * burnRate();
+  V.hunted += h * rate;
+  return { hrs, h, g: h * rate, starved: hrs - h };
+}
+
+/* ── boss fight simulation (the scene replays its log) ─────── */
+function simulate(units, boss, rnd, log) {
+  const us = units.map(u => ({ ...u, cur: u.hp, next: rnd() / u.spd * 0.6 }));
+  const q = boss.quirk, limit = q === "enrage" ? 15 : 30, dt = 0.05, spdK = q === "frost" ? 0.7 : 1;
+  let bhp = boss.hp, bnext = 1 / boss.spd, bn = 0, t = 0;
+  const alive = () => us.filter(u => u.cur > 0);
+  while (t < limit) {
+    t += dt;
+    if (q === "regen") bhp = Math.min(boss.hp, bhp + boss.hp * 0.025 * dt);
+    for (let i = 0; i < us.length; i++) {
+      const u = us[i];
+      if (u.cur <= 0 || t < u.next) continue;
+      u.next += 1 / (u.spd * spdK);
+      const miss = q === "ghost" && u.cls !== "swift" && rnd() < 0.3;
+      const crit = !miss && rnd() < u.crit;
+      let dmg = miss ? 0 : u.atk * (crit ? u.cdmg : 1) * (0.9 + 0.2 * rnd());
+      if (q === "armor" && !crit) dmg *= 0.6;
+      bhp -= dmg;
+      if (q === "thorns" && dmg) u.cur -= dmg * 0.2;
+      if (log) log.push({ t, a: "hit", i, dmg: Math.round(dmg), crit, miss, bhp: Math.max(0, bhp), hp: u.cur });
+      if (bhp <= 0) return { win: true, t };
+    }
+    if (t >= bnext) {
+      bnext += 1 / boss.spd; bn++;
+      const live = alive();
+      if (!live.length) return { win: false, t };
+      if (bn % (q === "slam" ? 3 : 5) === 0) {
+        live.forEach(u => { u.cur -= boss.atk * 0.6; });
+        if (log) log.push({ t, a: "slam", dmg: Math.round(boss.atk * 0.6), hps: us.map(u => u.cur) });
+      } else {
+        const front = live.filter(u => u.row === "front"), pool = front.length ? front : live;
+        const tg = pool[Math.floor(rnd() * pool.length)], d = boss.atk * (0.9 + 0.2 * rnd());
+        tg.cur -= d;
+        if (log) log.push({ t, a: "boss", i: us.indexOf(tg), dmg: Math.round(d), hp: tg.cur });
+      }
+      if (!alive().length) return { win: false, t };
+    }
+  }
+  return { win: false, t, timeout: true };
+}
+const winMemo = new Map();
+function winChance(units, z, n) {
+  if (!units.length) return 0;
+  const key = z + "|" + units.map(u => [u.k, u.row, Math.round(u.atk), Math.round(u.hp), u.spd.toFixed(2), u.crit.toFixed(2), u.cdmg].join(",")).join(";");
+  if (winMemo.has(key)) return winMemo.get(key);
+  const boss = bossOf(z);
+  let w = 0;
+  n = n || 80;
+  for (let i = 0; i < n; i++) if (simulate(units, rollBoss(boss), Math.random).win) w++;
+  if (winMemo.size > 400) winMemo.clear();
+  winMemo.set(key, w / n);
+  return w / n;
+}
+
+/* ── formatting ────────────────────────────────────────────── */
+function fmtN(x) {
+  x = Math.floor(x);
+  if (Math.abs(x) < 10000) return x.toLocaleString();
+  if (Math.abs(x) < 1e6) return (x / 1000).toFixed(x < 1e5 ? 1 : 0) + "k";
+  return (x / 1e6).toFixed(1) + "M";
+}
+function fmtHrs(h) {
+  const m = Math.max(0, Math.round(h * 60));
+  if (m < 60) return m + "m";
+  if (m < 48 * 60) return Math.floor(m / 60) + "h " + (m % 60) + "m";
+  return Math.round(m / 1440) + " days";
+}
+const fmtClock = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+function floatText(text, color, pt, dy) {
+  pt = pt || lastPt;
+  const el = document.createElement("div");
+  el.className = "xp-float";
+  el.textContent = text;
+  el.style.color = color || "var(--warn)";
+  el.style.left = pt.x + "px"; el.style.top = (pt.y - 12 + (dy || 0)) + "px";
+  document.body.append(el);
+  setTimeout(() => el.remove(), 1200);
+}
+const foodFloat = h => floatText(`+${h}h 🍖`, "var(--warn)", null, 22);
+
+/* ── new recruits, rank-ups, raid kills ────────────────────── */
+function cleanParty() {
+  V.party = V.party.filter((k, i, a) => H[k] && trained(k) && a.indexOf(k) === i).slice(0, beds());
+}
+function villageCheck(quiet) {
+  cleanParty();
+  const news = [];
+  HKEYS.forEach(k => {
+    const r = rankOf(trainingOf(k)), was = V.seen[k] || 0;
+    if (r > was) {
+      if (!was && V.party.length < beds()) V.party.push(k);
+      news.push(was ? `⭐ ${H[k].ico} ${H[k].name} reached rank ${RANK_NAME[r]}!` : `${H[k].ico} ${H[k].name} joined your village!`);
+    }
+    V.seen[k] = r;
+  });
+  if (news.length && !quiet) setTimeout(() => { toast(news[0] + (news.length > 1 ? ` And ${news.length - 1} more.` : "")); confetti(70); }, 450);
+  const R = raidState();
+  if (R.dmg >= R.hp && !R.claimed && V.raidNote !== R.week) {
+    V.raidNote = R.week;
+    if (!quiet) setTimeout(() => { toast(`${R.boss[0]} ${R.boss[1]} is down! Claim the chest in the 🏰 Village.`); confetti(160); }, 900);
+  }
+}
+
+/* ── weekly world boss: only real work damages it ──────────── */
+const RAID_BOSSES = [["🧊", "The Hiring Freeze"], ["🦑", "The Layoff Kraken"], ["👾", "The Ghost Job Hydra"],
+                     ["🌪️", "The Recession Storm"], ["🗿", "The Final Round"]];
+function weekStart(d) {
+  d = new Date(d || Date.now());
+  d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+  return localDay(d);
+}
+function raidState() {
+  const wk = weekStart(), inWk = iso => !!iso && iso >= wk;
+  const perDay = map => Object.entries(map || {}).filter(([d]) => inWk(d)).reduce((a, [, n]) => a + n, 0);
+  const parts = [
+    ["Applications", 10, Object.values(statusMap).filter(v => v.s === "applied" && inWk(v.t)).length, "var(--good-mark)"],
+    ["LeetCode solves", 8, Object.values(game.solved).filter(inWk).length, "var(--series-1)"],
+    ["Reviews", 4, perDay(game.revDays), "#8b5cf6"],
+    ["Outreach and follow-ups", 6, perDay(game.outDays) + perDay(game.fuDays), "#eb6834"],
+    ["Daily quests cleared", 10, Object.keys(game.clears || {}).filter(inWk).length, "#e87ba4"],
+    ["DataAnnotation half-hours", 3, Math.floor(daMinutes(DA.sess.filter(s => inWk(s.d))) / 30), "var(--warn)"],
+  ];
+  const prior = Object.keys(V.raids).filter(w => w < wk).length;
+  const hp = Math.round(220 * Math.pow(1.15, prior));
+  const dmg = parts.reduce((a, p) => a + p[1] * p[2], 0);
+  const idx = Math.floor(new Date(wk + "T12:00:00").getTime() / (7 * DAY)) % RAID_BOSSES.length;
+  return { week: wk, parts, hp, dmg, boss: RAID_BOSSES[idx], claimed: !!V.raids[wk] };
+}
+function claimRaid() {
+  settle();
+  const R = raidState();
+  if (R.dmg < R.hp || R.claimed) return;
+  const g = Math.round(zoneNeed(V.unlocked).gph * 6);
+  V.raids[R.week] = 1; V.raidGold += g; V.bonusFood += 8;
+  toast(`🎁 Chest opened: ${fmtN(g)} gold and 8 hours of food`);
+  confetti(220); saveGame(); render();
+}
+
+/* ── 💼 DataAnnotation timer ───────────────────────────────── */
+const daWage = () => Math.round(zoneNeed(V.unlocked).gph);      // gold per hour of work
+function logDA(day, m) {
+  const g = Math.round(m / 60 * daWage());
+  DA.sess.push({ d: day, m, g });
+  floatText(`+${fmtN(g)} 🪙`, "var(--warn)");
+  floatText(`+${(m / 60).toFixed(1)}h 🍖`, "var(--warn)", null, 22);
+  return g;
+}
+function daToggle() {
+  settle();
+  if (DA.run) {
+    const m = Math.min(600, Math.round((Date.now() - DA.run) / 60000)), day = localDay(new Date(DA.run));
+    DA.run = 0;
+    if (m >= 1) { const g = logDA(day, m); toast(`💼 Logged ${fmtHrs(m / 60)} of DataAnnotation. Your village got ${fmtN(g)} gold.`); }
+    else toast("That session was under a minute, so it wasn't logged");
+  } else {
+    DA.run = Date.now();
+    toast("💼 DataAnnotation timer started. Every minute earns gold for your village.");
+  }
+  saveGame(); render();
+}
+function daAdd() {
+  const el = document.getElementById("daMin"), m = Math.round(+(el && el.value));
+  if (!(m > 0 && m <= 720)) return toast("Enter minutes between 1 and 720", true);
+  settle(); logDA(localDay(), m);
+  toast(`💼 Added ${fmtHrs(m / 60)} of DataAnnotation`);
+  saveGame(); render();
+}
+function daDel(i) { if (!confirm("Remove this session and the gold it earned?")) return; DA.sess.splice(i, 1); saveGame(); render(); }
+function daRate(v) { DA.rate = v; saveGame(); renderVillage(); }
+function daRunning() { return DA.run ? Date.now() - DA.run : 0; }
+
+/* ── player actions ────────────────────────────────────────── */
+function vilSel(k) { V.sel = V.sel === k ? "" : k; renderVillage(); }
+function vilDuty(k) {
+  settle();
+  if (V.party.includes(k)) V.party = V.party.filter(x => x !== k);
+  else if (V.party.length < beds()) V.party.push(k);
+  else return toast(`All ${beds()} beds are taken. Upgrade the 🏨 Inn or bench someone first.`, true);
+  saveGame(); renderVillage();
+}
+function vilRow(k) { V.row[k] = rowOf(k) === "front" ? "back" : "front"; saveGame(); renderVillage(); }
+function vilGear(k, slot) {
+  settle();
+  const g = { ...gearOf(k) }, lv = g[slot], cap = 5 * V.bld.forge, cost = gearCost(lv);
+  if (lv >= cap) return toast(`Gear is capped at level ${cap}. Upgrade the ⚒️ Forge to go higher.`, true);
+  if (goldNow() < cost) return toast(`You need ${fmtN(cost)} gold for that`, true);
+  V.spent += cost; g[slot] = lv + 1; V.gear[k] = g;
+  floatText(slot === "w" ? "⚔️ +15% damage" : "🛡️ +15% HP", "var(--good-mark)");
+  saveGame(); renderVillage();
+}
+function vilBuild(b) {
+  settle();
+  const lv = V.bld[b], B = BUILDINGS[b];
+  if (lv >= B.max) return;
+  const cost = bldCost(b, lv);
+  if (goldNow() < cost) return toast(`You need ${fmtN(cost)} gold for that`, true);
+  V.spent += cost; V.bld[b] = lv + 1;
+  toast(`${B.ico} ${B.name} is now level ${lv + 1}. ${B.what(lv + 1)}.`);
+  confetti(90); saveGame(); render();
+}
+function vilZone(z) { if (z > V.unlocked || z === V.zone) return; settle(); V.zone = z; saveGame(); renderVillage(); }
+function vilChallenge() {
+  if (scene.fight) return;
+  settle();
+  const p = partyUnits();
+  if (!p.units.length) return toast("Put at least one hunter on duty first", true);
+  if (foodLeft() < 1) return toast("A boss fight costs 1 hour of food. Apply to a job to restock.", true);
+  const z = V.unlocked, boss = rollBoss(bossOf(z)), log = [];
+  const res = simulate(p.units, boss, Math.random, log);
+  V.bossFood += 1; V.boss.tries++;
+  let reward = 0;
+  if (res.win) {
+    V.boss.wins++; V.unlocked = z + 1;
+    reward = Math.round(zoneNeed(z + 1).gph * 3);
+    V.hunted += reward;
+    if (goldPerHour(p, z + 1) >= goldPerHour(p, V.zone)) V.zone = z + 1;   // move up when it pays better
+  }
+  saveGame();
+  playFight(p.units, boss, log, res, reward);
+  renderVillage();
+}
+
+/* ── what real work would help most right now ─────────────── */
+function nextProblem(k) {
+  const ps = TOPIC_POOLS[k].problems;
+  const fresh = ps.find(([n]) => !game.solved[n]);
+  if (fresh) return { n: fresh[0], name: fresh[1], url: fresh[2], review: false };
+  const due = ps.filter(([n]) => game.rev[n] && game.rev[n].due).sort((a, b) => game.rev[a[0]].due.localeCompare(game.rev[b[0]].due))[0];
+  return due ? { n: due[0], name: due[1], url: due[2], review: true } : null;
+}
+// the first boss you can't reliably beat yet: that's what training should aim at
+function hintZone(p) {
+  let z = V.unlocked;
+  while (z < V.unlocked + 3 && winChance(p.units, z) >= 0.9) z++;
+  return z;
+}
+function powerHints() {
+  const base = partyUnits(), z = hintZone(base), w0 = winChance(base.units, z), g0 = goldPerHour(base);
+  const out = [];
+  const gain = p => ({ dw: winChance(p.units, z) - w0, dg: goldPerHour(p) - g0 });
+  V.party.forEach(k => {
+    const c = trainingOf(k), r = rankOf(c);
+    if (r >= RANK_AT.length) return;
+    const need = RANK_AT[r] - c;
+    out.push({ k, ...gain(partyUnits(V.party, { [k]: RANK_AT[r] })), prob: nextProblem(k),
+      text: `${need} more ${H[k].label} ${need > 1 ? "solves or reviews" : "solve or review"} ranks ${H[k].name} up to ${RANK_NAME[r + 1]}` });
+  });
+  const free = V.party.length < beds();
+  const weakest = base.units.slice().sort((a, b) => a.atk * a.hp - b.atk * b.hp)[0];
+  HKEYS.filter(k => !trained(k)).forEach(k => {
+    const party = free ? [...V.party, k] : V.party.map(x => x === (weakest && weakest.k) ? k : x);
+    const p = partyUnits(party, { [k]: 1 });
+    const newTrait = [H[k].origin, H[k].cls].find(t => traitLv(t, p.tc[t] || 0) > traitLv(t, base.tc[t] || 0));
+    out.push({ k, ...gain(p), prob: nextProblem(k),
+      text: `Solve one ${H[k].label} problem to recruit ${H[k].name}` +
+        (newTrait ? `. That turns on ${TRAITS[newTrait].ico} ${TRAITS[newTrait].name}` : "") +
+        (!free && weakest ? ` (swap out ${H[weakest.k].name})` : "") });
+  });
+  const bench = HKEYS.filter(k => trained(k) && !V.party.includes(k));
+  if (free && bench.length) out.push({ k: bench[0], dw: 1, dg: 1, bench: true, text: `You have an empty bed. Put ${H[bench[0]].name} on duty, it's free.` });
+  return out.filter(h => h.dw > 0.004 || h.dg > 0.05).sort((a, b) => (b.dw - a.dw) || (b.dg - a.dg)).slice(0, 4);
+}
+
+/* ── rendering: the strip on the main page ─────────────────── */
+function renderVillageChips() {
+  const p = partyUnits(), fed = huntHours() > 0, g = goldPerHour(p);
+  document.getElementById("vGold").innerHTML = `🪙 <b>${fmtN(goldNow())}</b> gold`;
+  const food = document.getElementById("vFood");
+  food.className = "vchip" + (fed ? "" : " low");
+  food.innerHTML = !p.units.length ? "🍖 <b>Solve a LeetCode problem</b> to recruit your first hunter"
+    : fed ? `🍖 <b>${fmtHrs(huntHours())}</b> of food left` : "🍖 <b>Out of food.</b> Apply to a job to wake your hunters";
+  document.getElementById("vRate").innerHTML = fed && g ? `📈 <b>${fmtN(g)}</b> gold an hour` : "";
+  document.getElementById("vZone").innerHTML = `🗺️ ${esc(zoneDef(V.zone).name)}`;
+  const da = document.getElementById("daBtn");
+  da.classList.toggle("on", !!DA.run);
+  da.innerHTML = DA.run ? `💼 <b>${fmtClock(daRunning())}</b> Stop` : "💼 Start DataAnnotation";
+  scene.cv.setAttribute("aria-label", `Your village. ${p.units.length} hunters on duty in ${zoneDef(V.zone).name}. ${fed ? fmtHrs(huntHours()) + " of food left." : "Out of food."}`);
+}
+
+/* ── rendering: the village window ─────────────────────────── */
+const vilOpenNow = () => !document.getElementById("vil").hidden;
+function renderVilRes(p) {
+  p = p || partyUnits();
+  const fed = huntHours() > 0;
+  document.getElementById("vilRes").innerHTML = [
+    ["Gold", "🪙 " + fmtN(goldNow()), ""],
+    ["Food left", "🍖 " + (fed ? fmtHrs(huntHours()) : "None"), fed ? "" : "low"],
+    ["Gold an hour", "📈 " + (fed ? fmtN(goldPerHour(p)) : "0"), ""],
+    ["Party power", "⚔️ " + fmtN(p.power), ""],
+  ].map(([l, v, c]) => `<div><div class="l">${l}</div><div class="v ${c}">${v}</div></div>`).join("");
+}
+function hunterCard(k) {
+  const h = H[k], c = trainingOf(k), r = rankOf(c), duty = V.party.includes(k);
+  if (!c) return `<button class="hcard locked ${V.sel === k ? "sel" : ""}" onclick="vilSel('${k}')" title="Solve any ${esc(h.label)} problem to recruit">
+    <span class="tier tier${h.tier}"></span><div class="spr">${h.ico}</div><div class="nm">${esc(h.name)}</div><div class="rk">🔒 ${esc(h.label)}</div></button>`;
+  return `<button class="hcard ${duty ? "duty" : ""} ${V.sel === k ? "sel" : ""}" onclick="vilSel('${k}')" title="${esc(h.name)}, ${CLASSES[h.cls].name}">
+    <span class="tier tier${h.tier}"></span>${duty ? `<span class="rowtag">${rowOf(k) === "front" ? "FRONT" : "BACK"}</span>` : ""}
+    <div class="spr">${h.ico}</div><div class="nm">${esc(h.name)}</div><div class="rk">${CLASSES[h.cls].ico} Rank ${RANK_NAME[r]}</div>
+    <div class="pips">${[1, 2, 3, 4].map(i => `<i class="${i <= r ? "on" : ""}"></i>`).join("")}</div></button>`;
+}
+function traitChips(tc) {
+  return Object.entries(TRAITS).map(([t, T]) => {
+    const n = tc[t] || 0, lv = traitLv(t, n);
+    if (!n) return "";
+    const next = T.at.find(a => a > n);
+    const tip = lv ? T.what.replace("{}", pct(T.fx[lv - 1])) : `Needs ${T.at[0]} on duty`;
+    return `<span class="trait ${lv ? "on" : ""}" title="${esc(tip)}${next ? `. Next level at ${next}.` : ""}">${T.ico} ${T.name} ${n}/${next || T.at[T.at.length - 1]}</span>`;
+  }).join("");
+}
+function huntersCard(p) {
+  const party = V.party.filter(k => H[k]);
+  const empty = Math.max(0, beds() - party.length);
+  const bench = HKEYS.filter(k => trained(k) && !party.includes(k));
+  const locked = HKEYS.filter(k => !trained(k));
+  return `<div class="vcard"><h3>On duty <span>${party.length} of ${beds()} beds</span></h3>
+    <div class="hgrid">${party.map(hunterCard).join("")}${Array(empty).fill('<div class="empty-bed">Empty bed</div>').join("")}</div>
+    <div class="traits">${traitChips(p.tc) || '<span class="lead">Hunters who share a trait boost each other. Hover a trait to see what it does.</span>'}</div>
+    ${bench.length ? `<h4>Resting in the village</h4><div class="hgrid">${bench.map(hunterCard).join("")}</div>` : ""}
+    <h4>Not recruited yet. Solve one problem in the topic to recruit them.</h4>
+    <div class="hgrid">${locked.map(hunterCard).join("")}</div></div>`;
+}
+function detailCard() {
+  const k = V.sel;
+  if (!k || !H[k]) return "";
+  const h = H[k], c = trainingOf(k), r = rankOf(c), duty = V.party.includes(k), C = CLASSES[h.cls];
+  const sim = partyUnits(duty ? V.party : [...V.party, k]).units.find(u => u.k === k);
+  const g = gearOf(k), cap = 5 * V.bld.forge;
+  const nextAt = RANK_AT[r];
+  const probs = TOPIC_POOLS[k].problems.map(([n, name, url]) => {
+    const due = game.solved[n] && game.rev[n] && game.rev[n].due && game.rev[n].due <= localDay();
+    return `<li class="${game.solved[n] ? "solved" : ""}"><input type="checkbox" ${game.solved[n] ? "checked" : ""} onchange="toggleSolved(${n}, this)" aria-label="Mark #${n} solved">
+      <a href="${esc(url)}" target="_blank" rel="noopener">#${n} ${esc(name)}</a>${due ? '<span class="due">Review due</span>' : ""}</li>`;
+  }).join("");
+  const gearRow = (slot, ico, name, what) => {
+    const lv = g[slot];
+    return `<span>${ico} ${name} <b>level ${lv}</b><br><span class="sub2">${what}</span></span>
+      ${lv >= cap ? `<button class="mini" disabled title="Upgrade the Forge">Max for Forge ${V.bld.forge}</button>`
+        : `<button class="mini ${goldNow() >= gearCost(lv) ? "primary" : ""}" onclick="vilGear('${k}','${slot}')">Upgrade for ${fmtN(gearCost(lv))} 🪙</button>`}`;
+  };
+  return `<div class="vcard"><h3>${c ? "Hunter" : "Not recruited yet"} <span><button class="mini" onclick="vilSel('')">Close</button></span></h3>
+    <div class="hdet"><div class="spr">${h.ico}</div><div>
+      <b style="font-size:16px">${esc(h.name)}</b>
+      <div class="sub2">${TIER_NAME[h.tier]} ${C.ico} ${C.name}. ${C.note} Traits: ${TRAITS[h.origin].ico} ${TRAITS[h.origin].name} and ${TRAITS[h.cls].ico} ${TRAITS[h.cls].name}.</div>
+      ${c ? `<div style="margin-top:8px">Rank <b>${RANK_NAME[r]}</b>. Training ${c}${nextAt ? ` of ${nextAt} for rank ${RANK_NAME[r + 1]}` : ", max rank"}.</div>
+        <div class="meter gold"><div style="width:${nextAt ? Math.round(c / nextAt * 100) : 100}%"></div></div>
+        <div class="kv2">
+          <div><div class="l">Damage</div><div class="v">${fmtN(sim.atk)}</div></div>
+          <div><div class="l">HP</div><div class="v">${fmtN(sim.hp)}</div></div>
+          <div><div class="l">Attacks a second</div><div class="v">${sim.spd.toFixed(2)}</div></div>
+          <div><div class="l">Crit chance</div><div class="v">${pct(sim.crit)}</div></div>
+        </div>
+        <div class="hbtns">
+          <button class="mini ${duty ? "" : "primary"}" onclick="vilDuty('${k}')">${duty ? "Send to rest" : "Put on duty"}</button>
+          <button class="mini" onclick="vilRow('${k}')" title="The boss attacks the front row first">Stands in the ${rowOf(k)} row. Swap</button>
+        </div>
+        <h4>Gear (paid with gold)</h4>
+        <div class="gear">${gearRow("w", "⚔️", "Weapon", "Each level adds 15% damage")}${gearRow("a", "🛡️", "Armor", "Each level adds 15% HP")}</div>`
+      : `<div class="lead" style="margin-top:8px">Solve any problem below to recruit ${esc(h.name)}.</div>`}
+    </div></div>
+    <h4>Training: ${esc(h.label)} problems. Each solve counts 1, and each spaced review counts 1 more.</h4>
+    <ul class="plist">${probs}</ul></div>`;
+}
+function groundsCard(p) {
+  const n = Math.max(V.unlocked + 1, 3);
+  const nodes = Array.from({ length: n }, (_, i) => {
+    const z = i + 1, d = zoneDef(z), lock = z > V.unlocked;
+    const cls = z === V.zone ? "here" : z === V.unlocked + 1 ? "next locked" : lock ? "locked" : "";
+    return `<button class="znode ${cls}" onclick="vilZone(${z})" title="${esc(d.name)}${lock ? " (beat the boss before it to unlock)" : ""}">
+      <div class="dot">${lock ? "🔒" : d.mobs[0]}</div>${esc(d.name)}</button>`;
+  }).join("");
+  const eff = efficiency(p, V.zone), fed = huntHours() > 0;
+  const boss = bossOf(V.unlocked), Q = QUIRKS[boss.quirk] || QUIRKS[""];
+  const wc = winChance(p.units, V.unlocked);
+  const effNote = !p.units.length ? "Nobody is on duty." : eff >= 0.95 ? "Your party clears this zone easily."
+    : eff >= 0.6 ? "Your party handles this zone, with some retreats to heal."
+    : "This zone is rough. Hunters keep retreating. Pick an easier zone or train up.";
+  return `<div class="vcard"><h3>Hunting grounds <span>${esc(zoneDef(V.zone).name)}</span></h3>
+    <div class="zmap">${nodes}</div>
+    <div>Hunting efficiency <b>${pct(eff)}</b></div>
+    <div class="meter ${eff >= 0.6 ? "good" : "red"}"><div style="width:${pct(eff)}"></div></div>
+    <div class="lead">${effNote} ${!p.units.length ? "" : fed ? `Earning <b>${fmtN(goldPerHour(p))}</b> gold an hour.` : "<b>Hunters are asleep with no food.</b> One application feeds them for 4 hours."}</div>
+    <div class="boss"><div class="spr">${boss.ico}</div><div>
+      <b>${esc(boss.name)}</b>, the zone ${V.unlocked} boss
+      <div class="q">${Q[0]}. ${Q[1]}</div>
+      <div class="q" style="color:var(--ink-3)">Strong against it: ${Q[2]}.</div>
+    </div></div>
+    <button class="fight-btn" onclick="vilChallenge()" ${!p.units.length || scene.fight ? "disabled" : ""}>⚔️ Fight the boss. Win chance ${pct(wc)}</button>
+    <div class="lead" style="margin-top:6px">A fight costs 1 hour of food. Winning unlocks the next zone, which pays more.</div></div>`;
+}
+function hintsCard() {
+  const hs = powerHints(), fed = huntHours() > 0, food = huntHours();
+  const foodHint = food < 12 ? `<div class="hint"><span class="ico">🍖</span><span class="txt">${fed ? `Food runs out in ${fmtHrs(food)}.` : "Your hunters are out of food and asleep."} Each application feeds them for 4 more hours.</span>
+      <span class="gain">+4h each</span><div class="btns"><button class="mini primary" onclick="vilClose(); qpOpen()">🎮 Quick Play</button><button class="mini" onclick="vilClose()">Browse jobs</button></div></div>` : "";
+  const rows = hs.map(h => {
+    const gains = [h.dw > 0.004 && !h.bench ? `+${pct(h.dw)} to win` : "", h.dg > 0.05 && !h.bench ? `+${fmtN(h.dg)} gold an hour` : ""].filter(Boolean).join("<br>");
+    const btns = h.bench ? `<button class="mini primary" onclick="vilDuty('${h.k}')">Put on duty</button>`
+      : h.prob ? `<a class="mini primary" href="${esc(h.prob.url)}" target="_blank" rel="noopener">${h.prob.review ? "Review" : "Open"} #${h.prob.n} ${esc(h.prob.name)}</a>` +
+                 (h.prob.review ? "" : `<button class="mini ok" onclick="toggleSolved(${h.prob.n})">✓ I solved it</button>`) : "";
+    return `<div class="hint"><span class="ico">${H[h.k].ico}</span><span class="txt">${esc(h.text)}</span><span class="gain">${gains}</span><div class="btns">${btns}</div></div>`;
+  }).join("");
+  const target = bossOf(hintZone(partyUnits()));
+  return `<div class="vcard"><h3>Get stronger with real work <span>Aiming at ${target.ico} ${esc(target.name)}</span></h3>${foodHint}${rows ||
+    (foodHint ? "" : '<div class="lead">Your party is in good shape. Keep applying to keep them fed, and upgrade gear with gold.</div>')}</div>`;
+}
+function buildingsCard() {
+  const gold = goldNow();
+  return `<div class="vcard"><h3>Buildings <span>Paid with gold</span></h3><div class="blds">${Object.entries(BUILDINGS).map(([b, B]) => {
+    const lv = V.bld[b], max = lv >= B.max, cost = max ? 0 : bldCost(b, lv);
+    return `<div class="bld"><div class="t"><span>${B.ico} ${B.name}</span><span>Level ${lv}</span></div>
+      <div class="d">${B.what(lv)}.${max ? "" : `<br>Next: ${B.what(lv + 1)}.`}</div>
+      ${max ? '<button class="mini" disabled>Max level</button>'
+        : `<button class="mini ${gold >= cost ? "primary" : ""}" onclick="vilBuild('${b}')">Upgrade for ${fmtN(cost)} 🪙</button>`}</div>`;
+  }).join("")}</div></div>`;
+}
+function raidCard() {
+  const R = raidState(), done = R.dmg >= R.hp, left = Math.max(0, R.hp - R.dmg);
+  const stack = R.parts.filter(p => p[2]).map(([l, per, n, col]) =>
+    `<span title="${l}: ${n} for ${per * n} damage" style="flex:${Math.min(per * n, R.hp)};background:${col}"></span>`).join("");
+  const rest = done ? "" : `<span style="flex:${left}"></span>`;
+  const lines = R.parts.map(([l, per, n]) => `<div>${l}: <b>${per}</b> damage each${n ? `, ${n} so far` : ""}</div>`).join("");
+  return `<div class="vcard"><h3>Weekly world boss <span>Resets Monday</span></h3>
+    <div class="raid"><div class="spr">${R.boss[0]}</div><div>
+      <b>${R.boss[1]}</b>
+      <div>${done ? "Defeated this week!" : `${fmtN(left)} of ${fmtN(R.hp)} HP left`}</div>
+      <div class="stackbar">${stack}${rest}</div>
+    </div></div>
+    <div class="lead" style="margin-top:6px">Only real work hurts it:</div><div class="lead">${lines}</div>
+    ${done ? (R.claimed ? '<div class="lead">Chest claimed. Next week\'s boss is 15% tougher.</div>'
+      : `<button class="fight-btn" style="background:linear-gradient(135deg,#eda100,#eb6834)" onclick="claimRaid()">🎁 Claim the chest</button>`) : ""}</div>`;
+}
+function daCard() {
+  const wk = weekStart(), today = localDay();
+  const sess = DA.sess.map((s, i) => ({ ...s, i })).filter(s => s.d >= wk).reverse();
+  const minToday = daMinutes(DA.sess.filter(s => s.d === today)) + Math.floor(daRunning() / 60000);
+  const minWeek = daMinutes(sess) + Math.floor(daRunning() / 60000);
+  const rate = parseFloat(DA.rate);
+  return `<div class="vcard"><h3>💼 DataAnnotation <span>Work as long as you like</span></h3>
+    <div class="lead">Every hour of work pays your village <b>${fmtN(daWage())}</b> gold (the same as an hour of hunting in your best zone) plus 1 hour of food.</div>
+    <div class="da-big" id="daClock" style="${DA.run ? "" : "color:var(--ink-3);font-size:18px"}">${DA.run ? fmtClock(daRunning()) : "Timer is off"}</div>
+    ${DA.run ? `<div class="lead">So far this session: about ${fmtN(daRunning() / 3600e3 * daWage())} gold</div>` : ""}
+    <div class="da-row">
+      <button class="mini ${DA.run ? "ok" : "primary"}" onclick="daToggle()">${DA.run ? "■ Stop and log it" : "▶ Start the timer"}</button>
+      <span>or add</span><input id="daMin" type="number" min="1" max="720" placeholder="minutes"><button class="mini" onclick="daAdd()">Add</button>
+    </div>
+    <div class="kv2">
+      <div><div class="l">Today</div><div class="v">${fmtHrs(minToday / 60)}</div></div>
+      <div><div class="l">This week</div><div class="v">${fmtHrs(minWeek / 60)}</div></div>
+      <div><div class="l">Week pay</div><div class="v">${rate > 0 ? "$" + Math.round(minWeek / 60 * rate) : "—"}</div></div>
+    </div>
+    <div class="da-row"><span>Your hourly rate in $</span><input type="number" min="0" step="0.5" value="${esc(DA.rate || "")}" onchange="daRate(this.value)" placeholder="optional"></div>
+    ${sess.length ? `<h4>This week</h4><div class="fu-list">${sess.slice(0, 8).map(s => `<div class="fu"><div><b>${fmtHrs(s.m / 60)}</b> on ${s.d}<div class="sub2">${fmtN(s.g || 0)} gold</div></div>
+      <div class="btns"><button class="mini" onclick="daDel(${s.i})">Remove</button></div></div>`).join("")}</div>` : ""}</div>`;
+}
+function renderVillage() {
+  if (!vilOpenNow()) return;
+  settle();
+  const p = partyUnits();
+  renderVilRes(p);
+  document.getElementById("vilMain").innerHTML = detailCard() + huntersCard(p);
+  document.getElementById("vilSide").innerHTML = groundsCard(p) + hintsCard() + buildingsCard() + raidCard() + daCard();
+}
+function vilOpen(sel) {
+  document.getElementById("vil").hidden = false;
+  document.body.style.overflow = "hidden";
+  if (sel !== undefined) V.sel = sel;
+  sceneMount(); sceneWake(); renderVillage();
+}
+function vilClose() {
+  document.getElementById("vil").hidden = true;
+  document.body.style.overflow = "";
+  sceneMount(); sceneWake();
+}
+
+/* ═══ the scene: hunters walk out, fight, come home to eat and sleep ═══ */
+const scene = { cv: document.createElement("canvas"), ctx: null, W: 0, H: 0, hs: {}, mobs: [], fx: [], fight: null,
+                on: false, raf: 0, last: 0, col: null, stats: {}, fed: false, eff: 0, spawn: 0, shake: 0, seen: true };
+scene.cv.setAttribute("role", "img");
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+function sceneMount() {
+  const host = document.getElementById(vilOpenNow() ? "vilScene" : "vStripScene");
+  if (scene.cv.parentNode !== host) host.append(scene.cv);
+  sceneResize();
+}
+function sceneResize() {
+  const host = scene.cv.parentNode;
+  if (!host) return;
+  const r = host.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  if (!r.width) return;
+  const oldW = scene.W;
+  scene.W = r.width; scene.H = r.height;
+  scene.cv.width = Math.round(r.width * dpr); scene.cv.height = Math.round(r.height * dpr);
+  scene.ctx = scene.cv.getContext("2d");
+  if (scene.ctx) scene.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  scene.col = null;
+  if (oldW && oldW !== scene.W) {        // keep sprites in proportion
+    const k = scene.W / oldW;
+    Object.values(scene.hs).forEach(h => { h.x *= k; h.tx *= k; });
+    scene.mobs.forEach(m => { m.x *= k; });
+  }
+}
+function sceneColors() {
+  const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+  return { sky: v("--surface-2"), plane: v("--plane"), ground: v("--grid"), line: v("--baseline"), ink: v("--ink-1"),
+           ink2: v("--ink-2"), ink3: v("--ink-3"), good: v("--good-mark"), crit: v("--crit"), warn: v("--warn"), blue: v("--series-1") };
+}
+const lay = () => {
+  const W = scene.W, H = scene.H, town = Math.min(W * 0.36, 320);
+  return { W, H, town, ground: H * 0.8, f0: town + 28, f1: W - 14 };
+};
+const BLD_ORDER = ["inn", "kitchen", "forge", "market"];
+function bldX(b) { const L = lay(); return L.town * (0.13 + 0.25 * BLD_ORDER.indexOf(b)); }
+function sceneRefresh() {        // once a second: who's on duty, are they fed, how hard is the zone
+  const p = partyUnits();
+  scene.stats = Object.fromEntries(p.units.map(u => [u.k, u]));
+  scene.fed = huntHours() > 0 && p.units.length > 0;
+  scene.eff = efficiency(p, V.zone);
+  scene.dps = p.dps;
+  scene.zone = zoneDef(V.zone);
+}
+function sceneSync() {
+  const L = lay();
+  Object.keys(scene.hs).forEach(k => { if (!scene.stats[k]) delete scene.hs[k]; });
+  Object.keys(scene.stats).forEach((k, i) => {
+    if (scene.hs[k]) return;
+    const x = L.town + 4 + i * 16;
+    scene.hs[k] = { k, ico: H[k].ico, x, tx: x, lane: i % 3, speed: 58 + Math.random() * 26, state: "walk", cd: Math.random(), lunge: 0, flash: 0,
+                    rest: 25 + Math.random() * 30, wait: 0, dir: 1, target: null };
+  });
+}
+function spawnMob() {
+  const L = lay(), z = scene.zone || zoneDef(V.zone);
+  const hp = Math.max(30, (scene.dps || 30) * 2.4 / Math.max(scene.eff || 0.2, 0.15));
+  scene.mobs.push({ ico: z.mobs[Math.floor(Math.random() * z.mobs.length)], x: L.f0 + 40 + Math.random() * (L.f1 - L.f0 - 60),
+                    lane: Math.floor(Math.random() * 3), hp, max: hp, flash: 0, cd: 1 + Math.random() * 2, bob: Math.random() * 6, dead: 0 });
+}
+function addFx(x, y, text, color, size) { scene.fx.push({ x, y, text, color, size: size || 13, life: 0, max: 1.1, vy: -28 }); }
+function laneY(lane) { const L = lay(); return L.ground - 4 - lane * Math.min(12, scene.H * 0.07); }
+
+function sceneUpdate(dt) {
+  const L = lay();
+  scene.fx.forEach(f => { f.life += dt; f.y += f.vy * dt; });
+  scene.fx = scene.fx.filter(f => f.life < f.max);
+  if (scene.shake > 0) scene.shake -= dt;
+  if (scene.fight) return fightUpdate(dt);
+  sceneSync();
+  // monsters: a few always wander the field; more when hunters are out
+  const want = scene.fed ? Math.min(2 + Math.ceil(Object.keys(scene.hs).length / 2), 5) : 2;
+  scene.spawn -= dt;
+  if (scene.mobs.filter(m => !m.dead).length < want && scene.spawn <= 0) { spawnMob(); scene.spawn = 1.2 + Math.random() * 1.5; }
+  scene.mobs.forEach(m => {
+    m.bob += dt; if (m.flash > 0) m.flash -= dt;
+    if (m.dead) { m.dead += dt; return; }
+    const near = Object.values(scene.hs).find(h => h.state === "fight" && h.target === m);
+    if (near) {
+      m.cd -= dt;
+      if (m.cd <= 0) { m.cd = 1.6 + Math.random(); near.flash = 0.18; }
+    }
+  });
+  scene.mobs = scene.mobs.filter(m => m.dead < 0.4);
+  Object.values(scene.hs).forEach(h => {
+    const u = scene.stats[h.k];
+    if (h.lunge > 0) h.lunge -= dt;
+    if (h.flash > 0) h.flash -= dt;
+    const innSpot = bldX("inn") + 8 + (h.lane * 13);
+    if (!scene.fed) { h.target = null; h.tx = innSpot; h.state = Math.abs(h.x - h.tx) < 3 ? "sleep" : "walk"; }
+    else if (h.state === "rest") { h.wait -= dt; if (h.wait <= 0) { h.state = "walk"; h.rest = 25 + Math.random() * 30; } }
+    else {
+      h.rest -= dt;
+      if (h.rest <= 0) { h.target = null; h.tx = innSpot; if (Math.abs(h.x - h.tx) < 3) { h.state = "rest"; h.wait = 2.5 + Math.random() * 2; } else h.state = "walk"; }
+      else {
+        if (!h.target || h.target.dead) {
+          const live = scene.mobs.filter(m => !m.dead);
+          const load = m => Object.values(scene.hs).filter(o => o.target === m).length;
+          h.target = live.sort((a, b) => load(a) - load(b) || Math.abs(a.x - h.x) - Math.abs(b.x - h.x))[0] || null;
+        }
+        const m = h.target;
+        if (m) {
+          const side = h.x < m.x ? -1 : 1;
+          h.tx = m.x + side * (20 + h.lane * 4);
+          if (Math.abs(h.x - h.tx) < 3) {
+            h.state = "fight"; h.dir = -side;
+            h.cd -= dt;
+            if (h.cd <= 0 && u) {
+              h.cd = 1 / u.spd;
+              h.lunge = 0.16;
+              const crit = Math.random() < u.crit, dmg = u.atk * (crit ? u.cdmg : 1) * (0.9 + 0.2 * Math.random());
+              m.hp -= dmg; m.flash = 0.12;
+              addFx(m.x + (Math.random() - 0.5) * 10, laneY(m.lane) - 30, (crit ? "💥" : "") + fmtN(dmg), crit ? scene.col.warn : scene.col.ink2, crit ? 15 : 12);
+              if (m.hp <= 0) {
+                m.dead = 0.001; h.target = null;
+                addFx(m.x, laneY(m.lane) - 22, "🪙", null, 16);
+                addFx(m.x + 9, laneY(m.lane) - 14, "🪙", null, 12);
+              }
+            }
+          } else h.state = "walk";
+        } else { h.state = "walk"; if (Math.abs(h.x - h.tx) < 3) h.tx = L.f0 + Math.random() * (L.f1 - L.f0); }
+      }
+    }
+    const dx = h.tx - h.x;
+    if (Math.abs(dx) > 1) { const step = Math.sign(dx) * Math.min(Math.abs(dx), h.speed * dt); h.x += step; h.dir = Math.sign(dx); }
+  });
+}
+
+function drawEmoji(ctx, ico, x, y, size, flip, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+  ctx.font = `${size}px ${EMOJI_FONT}`;
+  ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.translate(x, y);
+  if (flip) ctx.scale(-1, 1);
+  ctx.fillText(ico, 0, 0);
+  ctx.restore();
+}
+function hpBar(ctx, x, y, w, frac, col) {
+  ctx.fillStyle = scene.col.ground; ctx.fillRect(x - w / 2, y, w, 4);
+  ctx.fillStyle = col; ctx.fillRect(x - w / 2, y, w * Math.max(0, Math.min(1, frac)), 4);
+}
+function sceneDraw() {
+  const ctx = scene.ctx;
+  if (!ctx || !scene.W) return;
+  if (!scene.col) scene.col = sceneColors();
+  const C = scene.col, L = lay(), t = performance.now() / 1000;
+  ctx.save();
+  if (scene.shake > 0 && !REDUCED) ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4);
+  // sky, ground, the road out of town
+  ctx.fillStyle = C.sky; ctx.fillRect(-10, -10, L.W + 20, L.H + 20);
+  ctx.fillStyle = C.ground; ctx.fillRect(-10, L.ground, L.W + 20, L.H - L.ground + 10);
+  [[0.18, 0.22, 26], [0.62, 0.14, 20], [0.9, 0.3, 16]].forEach(([fx, fy, sz], i) => {
+    const drift = REDUCED ? 0 : (t * (4 + i * 2)) % (L.W + 80);
+    drawEmoji(ctx, "☁️", ((fx * L.W + drift) % (L.W + 80)) - 40, L.H * fy + sz, sz, false, 0.55);
+  });
+  if (!scene.fed && !scene.fight) drawEmoji(ctx, "🌙", L.W - 40, L.H * 0.34, 18, false, 0.8);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.setLineDash([4, 5]);
+  ctx.beginPath(); ctx.moveTo(L.town + 8, L.ground - 26); ctx.lineTo(L.town + 8, L.ground); ctx.stroke(); ctx.setLineDash([]);
+  if (!scene.fed && !scene.fight) { ctx.fillStyle = "rgba(20,24,60,0.10)"; ctx.fillRect(L.town + 8, 0, L.W, L.ground); }
+  // labels
+  ctx.font = `600 11px Inter, system-ui, sans-serif`; ctx.fillStyle = C.ink3; ctx.textBaseline = "top";
+  ctx.textAlign = "left"; ctx.fillText("YOUR VILLAGE", 10, 8);
+  ctx.textAlign = "right"; ctx.fillText(scene.fight ? "BOSS FIGHT" : (scene.zone ? scene.zone.name.toUpperCase() : ""), L.W - 10, 8);
+  // buildings with their levels
+  BLD_ORDER.forEach(b => {
+    const x = bldX(b);
+    drawEmoji(ctx, BUILDINGS[b].ico, x, L.ground - 2, Math.min(34, L.H * 0.24, L.town / 4.8));
+    ctx.font = `600 10px Inter, system-ui, sans-serif`; ctx.fillStyle = C.ink3; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText("Lv " + V.bld[b], x, L.ground + 3);
+  });
+  if (DA.run) {     // you, at the market, working
+    const x = bldX("market") + 18;
+    drawEmoji(ctx, "🧑‍💻", x, L.ground - 2 - (REDUCED ? 0 : Math.abs(Math.sin(t * 3)) * 2), 20);
+  }
+  if (scene.fight) drawFight(ctx, L, t);
+  else {
+    // grass tufts so the field reads as a place
+    for (let i = 0; i < 6; i++) drawEmoji(ctx, "🌿", L.f0 + (i + 0.5) * (L.f1 - L.f0) / 6, L.ground + 12, 11, false, 0.5);
+    const ents = [...scene.mobs.map(m => ({ y: laneY(m.lane), m })), ...Object.values(scene.hs).map(h => ({ y: laneY(h.lane), h }))]
+      .sort((a, b) => a.y - b.y);
+    ents.forEach(({ y, m, h }) => {
+      if (m) {
+        const by = REDUCED ? 0 : Math.sin(m.bob * 2) * 1.5;
+        drawEmoji(ctx, m.ico, m.x, y + by, 22, false, m.dead ? Math.max(0, 1 - m.dead * 2.5) : 1);
+        if (m.flash > 0) { ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.beginPath(); ctx.arc(m.x, y - 11, 11, 0, 7); ctx.fill(); }
+        if (!m.dead && m.hp < m.max) hpBar(ctx, m.x, y - 30, 22, m.hp / m.max, C.crit);
+      } else {
+        const sleeping = h.state === "sleep" || h.state === "rest";
+        const walkBob = h.state === "walk" && !REDUCED ? Math.abs(Math.sin(t * 9 + h.lane)) * 3 : 0;
+        const lx = h.lunge > 0 ? h.dir * 6 : 0;
+        drawEmoji(ctx, h.ico, h.x + lx, y - walkBob, 22, h.dir < 0, sleeping ? 0.75 : 1);
+        if (h.flash > 0) { ctx.fillStyle = "rgba(208,59,59,0.35)"; ctx.beginPath(); ctx.arc(h.x, y - 11, 11, 0, 7); ctx.fill(); }
+        if (sleeping) {
+          ctx.font = `600 10px Inter, system-ui, sans-serif`; ctx.fillStyle = C.ink3; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+          ctx.fillText(h.state === "sleep" ? "z z" : "♥", h.x + 8, y - 22 - (REDUCED ? 0 : Math.sin(t * 2 + h.lane) * 2));
+        }
+      }
+    });
+    if (!scene.fed && Object.keys(scene.hs).length) {
+      ctx.font = `600 12px Inter, system-ui, sans-serif`; ctx.fillStyle = C.ink2; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("Out of food. Apply to a job to wake them up.", (L.f0 + L.f1) / 2, L.H * 0.36);
+    } else if (!Object.keys(scene.hs).length) {
+      ctx.font = `600 12px Inter, system-ui, sans-serif`; ctx.fillStyle = C.ink2; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(HKEYS.some(trained) ? "Nobody on duty. Open the village to send hunters out." : "Solve a LeetCode problem to recruit your first hunter.", (L.f0 + L.f1) / 2, L.H * 0.36);
+    }
+  }
+  scene.fx.forEach(f => {
+    const a = Math.max(0, 1 - f.life / f.max);
+    if (/^\p{Extended_Pictographic}/u.test(f.text) && f.text.length <= 3) drawEmoji(ctx, f.text, f.x, f.y, f.size, false, a);
+    else {
+      ctx.save(); ctx.globalAlpha = a; ctx.font = `700 ${f.size}px Inter, system-ui, sans-serif`;
+      ctx.fillStyle = f.color || C.ink; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(f.text, f.x, f.y); ctx.restore();
+    }
+  });
+  ctx.restore();
+}
+
+/* ── boss fight playback ───────────────────────────────────── */
+function playFight(units, boss, log, res, reward) {
+  if (vilOpenNow()) document.getElementById("vilScene").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "nearest" });
+  scene.fight = { units, boss, log, res, reward, t: 0, i: 0, speed: Math.max(1, res.t / 8), bhp: boss.hp,
+                  hp: units.map(u => u.hp), lunge: units.map(() => 0), flash: units.map(() => 0), bflash: 0, end: 0 };
+  sceneWake();
+}
+function fightPos(i) {
+  const L = lay(), f = scene.fight, u = f.units[i];
+  const row = f.units.filter(x => x.row === u.row), j = row.indexOf(u);
+  const fw = L.f1 - L.f0, gap = Math.min(30, fw * 0.07);
+  const x = L.f0 + fw * (u.row === "front" ? 0.5 : 0.24) - j * gap;
+  return { x, y: laneY(j % 3) + 6 };
+}
+function fightUpdate(dt) {
+  const f = scene.fight, L = lay(), bx = L.f0 + (L.f1 - L.f0) * 0.8, by = L.ground - 4;
+  f.lunge = f.lunge.map(x => Math.max(0, x - dt)); f.flash = f.flash.map(x => Math.max(0, x - dt)); f.bflash = Math.max(0, f.bflash - dt);
+  if (f.end) {
+    f.end -= dt;
+    if (f.end <= 0) fightDone();
+    return;
+  }
+  f.t += dt * f.speed;
+  while (f.i < f.log.length && f.log[f.i].t <= f.t) {
+    const e = f.log[f.i++];
+    if (e.a === "hit") {
+      f.lunge[e.i] = 0.15; f.bhp = e.bhp; f.hp[e.i] = e.hp;
+      if (!e.miss) f.bflash = 0.1;
+      addFx(bx - 10 + (Math.random() - 0.5) * 34, by - Math.min(64, lay().H * 0.42) * 0.55 - Math.random() * 12, e.miss ? "miss" : (e.crit ? "💥" : "") + fmtN(e.dmg),
+            e.miss ? scene.col.ink3 : e.crit ? scene.col.warn : scene.col.ink, e.crit ? 16 : 12);
+    } else if (e.a === "boss") {
+      f.hp[e.i] = e.hp; f.flash[e.i] = 0.25;
+      const p = fightPos(e.i);
+      addFx(p.x, p.y - 26, "-" + fmtN(e.dmg), scene.col.crit, 13);
+    } else if (e.a === "slam") {
+      f.hp = e.hps.slice(); f.flash = f.flash.map(() => 0.3); scene.shake = 0.3;
+      addFx(bx, by - 80, "SLAM", scene.col.crit, 16);
+    }
+  }
+  if (f.i >= f.log.length) f.end = 2.4;
+}
+function fightDone() {
+  const f = scene.fight;
+  scene.fight = null;
+  if (f.res.win) {
+    toast(`🏆 You beat ${f.boss.name}! ${zoneDef(f.boss.z + 1).name} is open, and you found ${fmtN(f.reward)} gold.`);
+    confetti(240);
+  } else {
+    toast(f.res.timeout ? `⏱️ Time ran out against ${f.boss.name}. See "Get stronger" for what helps most.`
+                        : `💀 ${f.boss.name} won this time. See "Get stronger" for what helps most.`);
+  }
+  renderVillage();
+}
+function drawFight(ctx, L, t) {
+  const f = scene.fight, C = scene.col, bx = L.f0 + (L.f1 - L.f0) * 0.8, by = L.ground - 4;
+  const bsize = Math.min(64, L.H * 0.42);
+  drawEmoji(ctx, f.boss.ico, bx + (f.bflash > 0 ? 3 : 0), by, bsize, false, f.end && f.res.win ? Math.max(0, f.end / 2.4) : 1);
+  hpBar(ctx, bx, by - bsize - 12, 90, f.bhp / f.boss.hp, C.crit);
+  ctx.font = `600 11px Inter, system-ui, sans-serif`; ctx.fillStyle = C.ink2; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.fillText(f.boss.name, bx, by - bsize - 15);
+  f.units.forEach((u, i) => {
+    const p = fightPos(i), dead = f.hp[i] <= 0;
+    drawEmoji(ctx, H[u.k].ico, p.x + (f.lunge[i] > 0 ? 8 : 0), p.y, 24, false, dead ? 0.25 : 1);
+    if (f.flash[i] > 0 && !dead) { ctx.fillStyle = "rgba(208,59,59,0.35)"; ctx.beginPath(); ctx.arc(p.x, p.y - 12, 12, 0, 7); ctx.fill(); }
+    if (!dead) hpBar(ctx, p.x, p.y + 2, 24, f.hp[i] / u.hp, C.good);
+  });
+  if (f.end) {
+    ctx.font = `800 ${Math.min(28, L.H * 0.16)}px Inter, system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = f.res.win ? C.good : C.crit;
+    ctx.fillText(f.res.win ? "VICTORY" : f.res.timeout ? "OUT OF TIME" : "DEFEAT", (L.f0 + L.f1) / 2, L.H * 0.22);
+  }
+}
+
+/* ── loop control: only animate when someone can see it ───── */
+function sceneLoop(ts) {
+  scene.raf = 0;
+  if (!scene.on) return;
+  const dt = Math.min(0.05, scene.last ? (ts - scene.last) / 1000 : 0.016);
+  scene.last = ts;
+  if (!scene.col) scene.col = sceneColors();
+  sceneUpdate(dt); sceneDraw();
+  scene.raf = requestAnimationFrame(sceneLoop);
+}
+function sceneWake() {
+  const run = !document.hidden && (vilOpenNow() || scene.seen);
+  if (run && !scene.on) { scene.on = true; scene.last = 0; scene.raf = requestAnimationFrame(sceneLoop); }
+  else if (!run && scene.on) { scene.on = false; if (scene.raf) cancelAnimationFrame(scene.raf); scene.raf = 0; }
+}
+
+/* ── wiring + boot ─────────────────────────────────────────── */
+(function villageBoot() {
+  if (!V.born) {          // first visit: start with a day of food and your current hunters on duty
+    V.born = localDay(); V.last = Date.now();
+    const earned = foodEarned();
+    V.eaten = Math.max(0, earned - 24);
+    V.bonusFood = Math.max(0, 24 - earned);
+    HKEYS.forEach(k => { V.seen[k] = rankOf(trainingOf(k)); });
+    const strength = k => RANK_MULT[rankOf(trainingOf(k))] * (1 + 0.25 * (H[k].tier - 1));
+    V.party = HKEYS.filter(trained).sort((a, b) => strength(b) - strength(a)).slice(0, beds());
+  }
+  const away = V.last ? Date.now() - V.last : 0, r = settle();
+  if (away > 15 * 60000 && V.party.length) setTimeout(() => {
+    if (r && r.g >= 1) toast(`🏰 While you were away (${fmtHrs(away / 3600e3)}), your hunters earned ${fmtN(r.g)} gold.` +
+                             (r.starved > 0.25 ? ` They ran out of food ${fmtHrs(r.starved)} ago.` : ""));
+    else if (huntHours() <= 0) toast("😴 Your hunters are asleep with no food. One application feeds them for 4 hours.");
+  }, 1400);
+  sceneRefresh();
+  sceneMount();
+  document.getElementById("vStripScene").onclick = () => vilOpen();
+  document.getElementById("vOpen").onclick = () => vilOpen();
+  document.getElementById("vilClose").onclick = vilClose;
+  document.getElementById("vil").addEventListener("click", e => { if (e.target.id === "vil") vilClose(); });
+  document.getElementById("vilScene").addEventListener("click", () => { if (scene.fight && !scene.fight.end) scene.fight.t = Infinity; });
+  document.getElementById("daBtn").onclick = daToggle;
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && vilOpenNow() && document.getElementById("qp").hidden) vilClose(); });
+  addEventListener("resize", () => sceneResize());
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { scene.col = null; });
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(es => { scene.seen = es[0].isIntersecting; sceneWake(); }).observe(document.getElementById("vStrip"));
+  }
+  document.addEventListener("visibilitychange", () => { settle(); saveGame(); sceneWake(); });
+  addEventListener("pagehide", () => { settle(); saveGame(); });
+  let ticks = 0;
+  setInterval(() => {
+    settle(); sceneRefresh(); renderVillageChips();
+    if (vilOpenNow()) {
+      renderVilRes();
+      const clock = document.getElementById("daClock");
+      if (clock && DA.run) clock.textContent = fmtClock(daRunning());
+    }
+    if (++ticks % 15 === 0) saveGame();
+  }, 1000);
+  sceneWake();
+})();
 
 refreshSyncUI();
 renderChart();
@@ -2453,11 +3676,10 @@ loadSheetRows(false);
 
 
 def main() -> None:
-    DOCS_DIR.mkdir(exist_ok=True)
     jobs = load_jobs()
     OUT_HTML.write_text(build_html(jobs), encoding="utf-8")
     latest = max((j["date"] for j in jobs), default="—")
-    print(f"Dashboard built: {OUT_HTML}  ({len(jobs)} jobs, latest day {latest})")
+    print(f"Legacy dashboard built: {OUT_HTML}  ({len(jobs)} jobs, latest day {latest})")
 
 
 if __name__ == "__main__":

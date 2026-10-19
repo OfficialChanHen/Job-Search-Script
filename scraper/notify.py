@@ -12,7 +12,7 @@ Channels (set whichever GitHub secrets you want; none set → prints and exits):
                         e.g. Gmail + an App Password (Google Account →
                         Security → 2-Step Verification → App passwords)
   SHEET_EXEC_URL        your Apps Script /exec URL → adds "follow up today"
-  DASHBOARD_URL         link used in the digest (defaults to GitHub Pages)
+  DASHBOARD_URL         link used in the digest (defaults to the Vercel app)
 """
 
 import html
@@ -26,9 +26,10 @@ from email.mime.text import MIMEText
 
 import requests
 
-from build_dashboard import load_jobs
+from build_data import load_jobs
 
-DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://officialchanhen.github.io/Job-Search-Script/")
+# The app on Vercel. Set the DASHBOARD_URL repo variable if you pick a different address.
+DASHBOARD_URL = os.getenv("DASHBOARD_URL") or "https://chan-job-hunt.vercel.app/"
 TOP_N = 10
 FOLLOW_UP_DAYS = (7, 21)       # applications this many days old with no reply
 
