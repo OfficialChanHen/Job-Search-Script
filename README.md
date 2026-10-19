@@ -30,11 +30,14 @@ Your hunters are 20 adventurers, one per LeetCode topic: Sir Aldric trains on ha
 graphs, and so on. Solving and reviewing problems in a topic recruits and ranks up its hunter. Hunters hunt the
 zones on their own while they have food, and food only comes from real work: applications, solves, reviews,
 outreach, cleared quests and DataAnnotation hours. Gold buys gear and buildings; zone bosses are auto-battles.
+On the map you can watch them attack, take hits, chop wood and mine stone, rest at the inn, and swing the
+weapon their gear level has earned (armor shows as a rim under their feet). Hit markers can be turned off in the
+village window.
 Zones repeat in harder laps without end, and `src/lib/game/game.test.ts` simulates 300 days of a steady player to
 check that progress never stalls or runs away.
 
-The look follows Hourelle's editorial system: warm paper, Lora and Instrument Sans, one green accent, coral only
-for things that need you now. Sprites are from the [Ninja Adventure asset pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
+Writing and layout follow the rules from Hourelle: status as one sentence, text only where it helps you decide,
+one accent colour, coral only for things that need you now. Sprites are from the [Ninja Adventure asset pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
 by Pixel-boy and AAA (CC0). To change a pick, unzip the pack to `assets/ninja-adventure/` (gitignored), edit
 `tools/build_sprites.py`, and run `python3 tools/build_sprites.py`.
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { Job } from "@/lib/data/types";
-import { confetti, copyText, floatFood, floatXP } from "@/lib/client/effects";
+import { copyText, floatFood, floatXP } from "@/lib/client/effects";
 import { liSearch, outreachMsg } from "@/lib/game/followups";
 import { NS, toggleOutreach, type KitJob, type ResumeEntry } from "@/lib/game/progress";
 import { STD_FIELDS, isGame, kitDrafts, knockouts, tellNote } from "@/lib/jobs/kit";
@@ -35,7 +35,7 @@ export function RefPanel({ j, store, sent }: { j: Job; store: Store; sent: strin
   const toggle = () => {
     const on = toggleOutreach(store, j.id);
     floatXP(on ? 30 : -30);
-    if (on) { floatFood(2); confetti(30); }
+    if (on) floatFood(2);
   };
   return (
     <div className="ref">

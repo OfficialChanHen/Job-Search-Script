@@ -101,3 +101,23 @@ export const RAID_BOSSES: [string, string][] = [["🧊", "The Hiring Freeze"], [
 
 /** Food each real action gives, in hours of hunting. */
 export const FOOD = { app: 4, solve: 2, review: 1, outreach: 2, followUp: 2, questClear: 6, daHour: 1 };
+
+/* ── equipment you can see: weapons step up a tier as their level rises, armor shows as a rim ── */
+export const GEAR_TIERS = [0, 5, 15, 30, 60];          // level where each tier starts
+export const gearTier = (lv: number) => GEAR_TIERS.filter(t => lv >= t).length - 1;
+// [sprite name, display name] per tier, by class
+export const WEAPONS: Record<ClassKey, [string, string][]> = {
+  guardian: [["Club", "Wooden club"], ["Hammer", "War hammer"], ["Axe", "Battle axe"], ["Lance", "Knight's lance"], ["Lance2", "Dragon lance"]],
+  striker:  [["Stick", "Training stick"], ["Sword", "Iron sword"], ["Katana", "Katana"], ["BigSword", "Greatsword"], ["Sword2", "Hero's blade"]],
+  swift:    [["Sai", "Sai"], ["Ninjaku", "Ninjaku"], ["Rapier", "Rapier"], ["Katana", "Moon katana"], ["Sword2", "Hero's blade"]],
+  sniper:   [["Bow", "Short bow"], ["Bow2", "Long bow"], ["MagicWand", "Magic wand"], ["Book", "Spell tome"], ["Book", "Archmage's tome"]],
+};
+export const ARMOR: { name: string; color: string }[] = [
+  { name: "Traveler's cloth", color: "" }, { name: "Bronze mail", color: "#C0823F" }, { name: "Silver mail", color: "#C9D2DC" },
+  { name: "Gold plate", color: "#E8BE4E" }, { name: "Starforged plate", color: "#A88BF0" },
+];
+export const weaponFor = (cls: ClassKey, lv: number) => WEAPONS[cls][gearTier(lv)];
+export const armorFor = (lv: number) => ARMOR[gearTier(lv)];
+// each zone's two field monsters, as the hunters' status lines name them (matches tools/build_sprites.py)
+export const MOB_NAMES: [string, string][] = [["slime", "mushroom"], ["skull", "floating eye"], ["bat", "mole"], ["snake", "lizard"],
+  ["beast", "owl"], ["cyclops", "reptile"], ["kappa", "octopus"], ["lantern spirit", "flame spirit"], ["dragon", "bear"]];

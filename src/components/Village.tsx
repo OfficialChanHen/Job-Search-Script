@@ -6,7 +6,7 @@ import { faceUrl } from "@/lib/client/sprites";
 import { logDA, setDARate } from "@/lib/game/da";
 import { NS } from "@/lib/game/progress";
 import { localDay, weekStart } from "@/lib/game/time";
-import { BUILDINGS, CLASSES, RANK_AT, RANK_NAME, TIER_NAME, TRAITS, HUNTERS, type BuildingKey, type TraitKey } from "@/lib/game/village/defs";
+import { BUILDINGS, CLASSES, RANK_AT, RANK_NAME, TIER_NAME, TRAITS, HUNTERS, armorFor, weaponFor, type BuildingKey, type TraitKey } from "@/lib/game/village/defs";
 import {
   applyFight, beds, gearCap, bldCost, bossOf, buyBuilding, buyGear, claimRaid, daWage, efficiency, fightBoss, gearCost, gearOf, goldNow,
   goldPerHour, hintZone, huntHours, hunterKeys, normalize, partyUnits, pickZone, powerHints, quirkInfo, raidState, rankOf, rowOf,
@@ -55,6 +55,7 @@ export function VillageWindow() {
   }, [vil, setVil]);
   if (vil === null || !live) return null;
   const p = partyUnits(live, g.ctx), fed = huntHours(live, g.p) > 0;
+  const doing = getScene().actions();
   const sel = vil;
   const select = (k: string) => setVil(sel === k ? "" : k);
   const fight = () => {
@@ -65,7 +66,7 @@ export function VillageWindow() {
     mutateVillage(g, v => applyFight(v, z, out.win, out.reward, party));
     host.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     getScene().playFight(p.units, { ico: out.boss.ico, name: out.boss.name, hp: out.boss.hp, z }, out.log, out, () => {
-      if (out.win) { toast(`🏆 You beat ${out.boss.name}! ${zoneDef(z + 1).name} is open, and you found ${fmtN(out.reward)} gold.`); confetti(240); }
+      if (out.win) { toast(`You beat ${out.boss.name}. ${zoneDef(z + 1).name} is open, and you found ${fmtN(out.reward)} gold.`); confetti(120); }
       else toast(out.timeout ? `⏱️ Time ran out against ${out.boss.name}. See "Get stronger" for what helps most.` : `💀 ${out.boss.name} won this time. See "Get stronger" for what helps most.`);
       force(x => x + 1);
     });
@@ -79,13 +80,16 @@ export function VillageWindow() {
               ["Gold an hour", fed ? fmtN(goldPerHour(live, p)) : "0", ""], ["Party power", fmtN(p.power), ""]].map(([l, v, c]) =>
               <div key={l}><div className="l">{l}</div><div className={"v " + c}>{v}</div></div>)}
           </div>
-          <button className="mini" onClick={() => setVil(null)}>Close</button>
+          <div className="vil-top-side">
+            <HitmarkerToggle />
+            <button className="mini" onClick={() => setVil(null)}>Close</button>
+          </div>
         </div>
         <div className="vscene big" ref={host} />
         <div className="vil-grid">
           <div className="vil-col">
-            {sel && HUNTERS[sel] && <HunterDetail g={g} live={live} k={sel} close={() => setVil("")} />}
-            <HuntersCard g={g} live={live} p={p} sel={sel} select={select} />
+            {sel && HUNTERS[sel] && <HunterDetail g={g} live={live} k={sel} doing={doing[sel]} close={() => setVil("")} />}
+            <HuntersCard g={g} live={live} p={p} sel={sel} select={select} doing={doing} />
           </div>
           <div className="vil-col">
             <Grounds g={g} live={live} p={p} onFight={fight} />
@@ -100,7 +104,7 @@ export function VillageWindow() {
   );
 }
 
-function HunterCard({ g, live, k, sel, select }: { g: Game; live: VillageState; k: string; sel: string; select: (k: string) => void }) {
+function HunterCard({ g, live, k, sel, select, doing }: { g: Game; live: VillageState; k: string; sel: string; select: (k: string) => void; doing?: string }) {
   const h = HUNTERS[k], c = trainingOf(g.ctx, k), r = rankOf(c), duty = live.party.includes(k), label = g.data.topics[k].label;
   if (!c) return (
     <button className={"hcard locked" + (sel === k ? " sel" : "")} onClick={() => select(k)} title={`Solve any ${label} problem to recruit`}>
@@ -109,12 +113,14 @@ function HunterCard({ g, live, k, sel, select }: { g: Game; live: VillageState; 
   return (
     <button className={"hcard" + (duty ? " duty" : "") + (sel === k ? " sel" : "")} onClick={() => select(k)} title={`${h.name}, ${CLASSES[h.cls].name}`}>
       <span className={`tier tier${h.tier}`} />{duty && <span className="rowtag">{rowOf(live, k) === "front" ? "FRONT" : "BACK"}</span>}
-      <Face id={"hunter:" + k} fallback={h.ico} /><div className="nm">{h.name}</div><div className="rk">Rank {RANK_NAME[r]}, {label}</div>
+      <div className="face-gear"><Face id={"hunter:" + k} fallback={h.ico} /><GearIcon cls={h.cls} lv={gearOf(live, k).w} rim={armorFor(gearOf(live, k).a).color} /></div>
+      <div className="nm">{h.name}</div><div className="rk">Rank {RANK_NAME[r]}, {label}</div>
+      {doing && <div className="doing">{doing}</div>}
       <div className="pips">{[1, 2, 3, 4].map(i => <i key={i} className={i <= r ? "on" : ""} />)}</div>
     </button>);
 }
 
-function HuntersCard({ g, live, p, sel, select }: { g: Game; live: VillageState; p: Party; sel: string; select: (k: string) => void }) {
+function HuntersCard({ g, live, p, sel, select, doing }: { g: Game; live: VillageState; p: Party; sel: string; select: (k: string) => void; doing: Record<string, string> }) {
   const keys = hunterKeys(g.data.topics);
   const party = live.party.filter(k => HUNTERS[k] && trained(g.ctx, k));
   const bench = keys.filter(k => trained(g.ctx, k) && !party.includes(k)), locked = keys.filter(k => !trained(g.ctx, k));
@@ -128,7 +134,7 @@ function HuntersCard({ g, live, p, sel, select }: { g: Game; live: VillageState;
   return (
     <div className="vcard"><h3>On duty <span>{party.length} of {beds(live)} beds</span></h3>
       <div className="hgrid">
-        {party.map(k => <HunterCard key={k} g={g} live={live} k={k} sel={sel} select={select} />)}
+        {party.map(k => <HunterCard key={k} g={g} live={live} k={k} sel={sel} select={select} doing={doing[k]} />)}
         {Array.from({ length: Math.max(0, beds(live) - party.length) }, (_, i) => <div key={i} className="empty-bed">Empty bed</div>)}
       </div>
       <div className="traits">{traits.length ? traits : <span className="lead">Hunters who share a trait boost each other. Hover a trait to see what it does.</span>}</div>
@@ -139,7 +145,7 @@ function HuntersCard({ g, live, p, sel, select }: { g: Game; live: VillageState;
   );
 }
 
-function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: string; close: () => void }) {
+function HunterDetail({ g, live, k, close, doing }: { g: Game; live: VillageState; k: string; close: () => void; doing?: string }) {
   const h = HUNTERS[k], C = CLASSES[h.cls], c = trainingOf(g.ctx, k), r = rankOf(c), duty = live.party.includes(k);
   const u = partyUnits(live, g.ctx, duty ? live.party : [...live.party, k]).units.find(x => x.k === k);
   const gear = gearOf(live, k), cap = gearCap(live), gold = goldNow(live, g.p), nextAt = RANK_AT[r];
@@ -152,10 +158,11 @@ function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: s
   const gearRow = (slot: "w" | "a", ico: string, name: string, what: string) => {
     const lv = gear[slot];
     return <>
-      <span>{ico} {name} <b>level {lv}</b><br /><span className="sub2">{what}</span></span>
+      <span className="gear-name"><GearIcon cls={h.cls} lv={slot === "w" ? lv : 0} rim={slot === "a" ? armorFor(lv).color || "var(--border2)" : ""} armor={slot === "a"} />
+        <span><b>{slot === "w" ? weaponFor(h.cls, lv)[1] : armorFor(lv).name}</b>, level {lv}<br /><span className="sub2">{what}</span></span></span>
       {lv >= cap ? <button className="mini" disabled title="Upgrade the Forge">Max for Forge {live.bld.forge}</button>
         : <button className={"mini" + (gold >= gearCost(lv) ? " primary" : "")} onClick={() => act(g, live, v => buyGear(v, g.p, k, slot),
-            () => floatText(slot === "w" ? "+8% damage" : "+8% HP", "var(--good-mark)"))}>Upgrade, {fmtN(gearCost(lv))} gold</button>}
+            () => { floatText(slot === "w" ? "+8% damage" : "+8% HP", "var(--teal-text)"); getScene().celebrate(k); })}>Upgrade, {fmtN(gearCost(lv))} gold</button>}
     </>;
   };
   return (
@@ -165,6 +172,7 @@ function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: s
         <b style={{ fontSize: 16 }}>{h.name}</b>
         <div className="sub2">{TIER_NAME[h.tier]} {C.ico} {C.name}. {C.note} Traits: {TRAITS[h.origin].ico} {TRAITS[h.origin].name} and {TRAITS[h.cls].ico} {TRAITS[h.cls].name}.</div>
         {c && u ? <>
+          {doing && <p className="doing big">{doing}</p>}
           <div style={{ marginTop: 8 }}>Rank <b>{RANK_NAME[r]}</b>. Training {c}{nextAt ? ` of ${nextAt} for rank ${RANK_NAME[r + 1]}` : ", max rank"}.</div>
           <div className="meter gold"><div style={{ width: (nextAt ? Math.round(c / nextAt * 100) : 100) + "%" }} /></div>
           <div className="kv2">
@@ -218,7 +226,7 @@ function Grounds({ g, live, p, onFight }: { g: Game; live: VillageState; p: Part
         </div>)}
       </div></div>
       <button className="fight-btn" onClick={onFight} disabled={!p.units.length}>Fight the boss. {pct(wc)} chance to win</button>
-      <div className="lead" style={{ marginTop: 6 }}>Fights are free. After a loss the boss rests for 20 minutes. Winning opens the next zone, which pays more.</div>
+      <div className="lead" style={{ marginTop: 6 }}>Free to fight. After a loss, the boss rests for 20 minutes.</div>
     </div>
   );
 }
@@ -260,7 +268,7 @@ function Buildings({ g, live }: { g: Game; live: VillageState }) {
           <div className="d">{B.what(lv)}.{!max && <><br />Next: {B.what(lv + 1)}.</>}</div>
           {max ? <button className="mini" disabled>Max level</button>
             : <button className={"mini" + (gold >= cost ? " primary" : "")} onClick={() => act(g, live, v => buyBuilding(v, g.p, b),
-                () => { toast(`${B.name} is now level ${lv + 1}. ${B.what(lv + 1)}.`); confetti(90); })}>Upgrade, {fmtN(cost)} gold</button>}
+                () => toast(`${B.name} is now level ${lv + 1}. ${B.what(lv + 1)}.`))}>Upgrade, {fmtN(cost)} gold</button>}
         </div>;
       })}
     </div></div>
@@ -279,11 +287,12 @@ function Raid({ g, live }: { g: Game; live: VillageState }) {
           {!done && <span style={{ flex: left }} />}
         </div>
       </div></div>
-      <div className="lead" style={{ marginTop: 6 }}>Only real work hurts it:</div>
-      <div className="lead">{R.parts.map(([l, per, n]) => <div key={l}>{l}: <b>{per}</b> damage each{n ? `, ${n} so far` : ""}</div>)}</div>
+      <details className="usual"><summary>How to hurt it</summary>
+        <div className="lead">{R.parts.map(([l, per, n]) => <div key={l}>{l}: <b>{per}</b> each{n ? `, ${n} so far` : ""}</div>)}</div>
+      </details>
       {done && (R.claimed ? <div className="lead">Chest claimed. Next week&apos;s boss is 15% tougher.</div>
         : <button className="fight-btn" style={{ background: "linear-gradient(135deg,#eda100,#eb6834)" }}
-            onClick={() => act(g, live, v => claimRaid(v, g.p), () => { toast("🎁 Chest opened: gold and 8 hours of food"); confetti(220); })}>🎁 Claim the chest</button>)}
+            onClick={() => act(g, live, v => claimRaid(v, g.p), () => { toast("Chest opened: gold and 8 hours of food."); confetti(110); })}>Claim the chest</button>)}
     </div>
   );
 }
@@ -305,7 +314,7 @@ function DACard({ g, live, now }: { g: Game; live: VillageState; now: number }) 
   };
   return (
     <div className="vcard"><h3>💼 DataAnnotation <span>Work as long as you like</span></h3>
-      <div className="lead">Every hour of work pays your village <b>{fmtN(daWage(live))}</b> gold (the same as an hour of hunting in your best zone) plus 1 hour of food.</div>
+      <div className="lead">An hour of work pays <b>{fmtN(daWage(live))}</b> gold and an hour of food.</div>
       <div className="da-big" style={run ? {} : { color: "var(--ink-3)", fontSize: 18 }}>{run ? fmtClock(now - run) : "Timer is off"}</div>
       {run > 0 && <div className="lead">So far this session: about {fmtN((now - run) / 3600e3 * daWage(live))} gold</div>}
       <div className="da-row">
@@ -326,4 +335,23 @@ function DACard({ g, live, now }: { g: Game; live: VillageState; now: number }) 
       ))}</div></>}
     </div>
   );
+}
+
+/** A hunter's weapon at its current tier, with their armor's colour as a rim. */
+function GearIcon({ cls, lv, rim, armor }: { cls: keyof typeof CLASSES; lv: number; rim?: string; armor?: boolean }) {
+  const [sprite, name] = weaponFor(cls, lv), src = faceUrl("weapon:" + sprite);
+  return (
+    <span className={"gear-icon" + (armor ? " armor" : "")} title={armor ? "Armor" : name} style={rim ? { boxShadow: `0 0 0 2px ${rim}` } : undefined}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {!armor && src && <img src={src} alt="" />}
+    </span>
+  );
+}
+
+/** Damage numbers and hit marks over the art. Some people find them busy, so they can be turned off. */
+export function HitmarkerToggle() {
+  const { store } = useGame();
+  const on = store.get<boolean>(NS.pref, "hitmarkers") !== false;
+  return <button className={"mini" + (on ? " on" : "")} role="switch" aria-checked={on}
+    onClick={() => store.set(NS.pref, "hitmarkers", !on)}>Hit markers {on ? "on" : "off"}</button>;
 }

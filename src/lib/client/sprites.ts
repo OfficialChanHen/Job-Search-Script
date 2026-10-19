@@ -53,7 +53,7 @@ export function actorSize(id: string, anim = "idle", dir: Dir = "down"): { w: nu
   return { w: s?.fw ?? a.fw, h: s?.fh ?? a.fh };
 }
 
-export interface DrawOpts { anim?: string; dir?: Dir; t?: number; scale: number; alpha?: number; flip?: boolean; once?: boolean }
+export interface DrawOpts { anim?: string; dir?: Dir; t?: number; scale: number; alpha?: number; flip?: boolean; once?: boolean; rotate?: number }
 /** Draw an actor standing at (x, y): bottom center, in canvas pixels. */
 export function drawActor(ctx: CanvasRenderingContext2D, id: string, emoji: string, x: number, y: number, o: DrawOpts) {
   const a = manifest.actors?.[id], s = a && pick(a, o.anim ?? "idle", o.dir ?? "down");
@@ -68,6 +68,7 @@ export function drawActor(ctx: CanvasRenderingContext2D, id: string, emoji: stri
     const w = sw * o.scale, h = sh * o.scale;
     ctx.imageSmoothingEnabled = false;
     ctx.translate(Math.round(x), Math.round(y));
+    if (o.rotate) ctx.rotate(o.rotate);
     if (o.flip) ctx.scale(-1, 1);
     ctx.drawImage(image!, sx, sy, sw, sh, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
   } else {

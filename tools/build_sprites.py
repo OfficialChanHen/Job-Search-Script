@@ -85,6 +85,9 @@ PROPS = {
     "stump": (1, 134, 30, 23),
 }
 EMOTES = {"sleep": 28, "heart": 27, "alert": 22, "star": 29}
+# held weapons (Items/Weapons/<name>/Sprite.png): the tiers a hunter's weapon steps through as it levels
+WEAPONS = ["Club", "Hammer", "Axe", "Lance", "Lance2", "Stick", "Sword", "Katana", "BigSword", "Sword2",
+           "Sai", "Ninjaku", "Rapier", "Bow", "Bow2", "MagicWand", "Book"]
 
 
 def png_size(p: Path) -> tuple[int, int]:
@@ -221,8 +224,22 @@ def main() -> None:
                            ("fx:spark", fx / "Particle" / "Spark.png", 16)):
         a = strip_anim(path, f"fx/{path.parent.name}-{path.name}", fps)
         actors[key] = {"src": a["src"], "fw": a["fw"], "fh": a["fh"], "anims": {"idle": a}}
+    for key, name in (("fx:leaf", "Leaf"), ("fx:rock", "Rock"), ("fx:wood", "Wood"), ("fx:grass", "Grass")):   # gathering chips
+        a = strip_anim(fx / "Particle" / f"{name}.png", f"fx/particle-{name}.png", 14)
+        actors[key] = {"src": a["src"], "fw": a["fw"], "fh": a["fh"], "anims": {"idle": a}}
+    for key, name in (("res:wood", "Branch"), ("res:stone", "Rock"), ("res:herb", "Grass"), ("res:gem", "GemGreen")):   # what gathering brings home
+        path = PACK / "Items" / "Resource" / f"{name}.png"
+        w, h = png_size(path)
+        src = copy(path, f"res/{name}.png")
+        actors[key] = {"src": src, "fw": w, "fh": h, "anims": {"idle": {"frames": [[0, 0]], "fps": 1}}}
     coin = strip_anim(PACK / "Items" / "Treasure" / "Coin2.png", "fx/coin.png", 10)
     actors["fx:coin"] = {"src": coin["src"], "fw": coin["fw"], "fh": coin["fh"], "anims": {"idle": coin}}
+    for name in WEAPONS:
+        path = PACK / "Items" / "Weapons" / name / "Sprite.png"
+        w, h = png_size(path)
+        src = copy(path, f"weapons/{name}.png")
+        actors["weapon:" + name] = {"src": src, "fw": w, "fh": h, "anims": {"idle": {"frames": [[0, 0]], "fps": 1}}}
+        faces["weapon:" + name] = src
     for k, n in EMOTES.items():
         src = copy(PACK / "Ui" / "Emote" / f"emote{n}.png", f"emote/{k}.png")
         actors["emote:" + k] = {"src": src, "fw": 14, "fh": 13, "anims": {"idle": {"frames": [[0, 0]], "fps": 1}}}

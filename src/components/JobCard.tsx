@@ -1,7 +1,7 @@
 "use client";
 import { memo, useState } from "react";
 import type { Company, Job, Prep } from "@/lib/data/types";
-import { confetti, floatFood, floatXP, toast } from "@/lib/client/effects";
+import { floatFood, floatXP, toast } from "@/lib/client/effects";
 import { NS, setStatus, toggleSolved, type JobStatus, type KitJob, type ResumeEntry, type SheetRow, type StatusEntry } from "@/lib/game/progress";
 import { copySheetRow, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
 import type { Store } from "@/lib/sync/store";
@@ -61,7 +61,7 @@ function PrepPanel({ prep, solved, store }: { prep: Prep; solved: Record<string,
   const tick = (n: number) => {
     const now = toggleSolved(store, n);
     floatXP(now ? 20 : -20);
-    if (now) { floatFood(2); confetti(24); }
+    if (now) floatFood(2);
   };
   return (
     <div className="prep">

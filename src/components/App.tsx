@@ -175,7 +175,7 @@ function useVillageClock(game: Game) {
     const r = review(village, ctx);
     if (JSON.stringify(r.v.party) === JSON.stringify(village.party) && JSON.stringify(r.v.seen) === JSON.stringify(village.seen)) return;
     store.mutate<VillageState>(NS.village, "state", v => review(normalize(v), ref.current.ctx).v);
-    if (r.news.length) setTimeout(() => { toast(r.news[0] + (r.news.length > 1 ? ` And ${r.news.length - 1} more.` : "")); confetti(70); }, 450);
+    if (r.news.length) setTimeout(() => toast(r.news[0] + (r.news.length > 1 ? ` And ${r.news.length - 1} more.` : "")), 450);
   }, [game.rev]);
 }
 
@@ -187,9 +187,9 @@ function useCelebrations(game: Game) {
     const facts = { zones: stats.zones, raidWins: stats.raidWins, bldMax: stats.bldMax, hunters: stats.hunters };
     const r = checkProgress(store, () => gameStats(snapshot(store), byId, facts), new Date());
     if (first.current) { first.current = false; return; }      // don't celebrate old progress on load
-    if (r.cleared) { toast("Every quest done for today. That's 50 XP and a day's food."); confetti(160); }
-    r.badges.forEach(([, , name], i) => setTimeout(() => { toast(`New badge: ${name}. 25 XP.`); confetti(120); }, 300 + i * 1200));
-    if (r.levelUp) setTimeout(() => { toast(`Level ${r.levelUp}. You're now ${titleFor(levelFor(r.stats.xp))}.`); confetti(260); }, r.badges.length ? 1400 : 200);
+    if (r.cleared) { toast("Every quest done for today. That's 50 XP and a day's food."); confetti(80); }
+    r.badges.forEach(([, , name], i) => setTimeout(() => toast(`New badge: ${name}. 25 XP.`), 300 + i * 1200));
+    if (r.levelUp) setTimeout(() => { toast(`Level ${r.levelUp}. You're now ${titleFor(levelFor(r.stats.xp))}.`); confetti(130); }, r.badges.length ? 1400 : 200);
   }, [game]);
 }
 

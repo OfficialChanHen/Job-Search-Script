@@ -5,7 +5,7 @@
    food. Boss fights replay a simulation log on the field. One canvas, moved
    between wherever the village is shown. Pixel art from the Ninja Adventure
    pack (CC0), drawn through sprites.ts; emoji stand in for anything missing. */
-import { BUILDINGS, HUNTERS, type BuildingKey } from "@/lib/game/village/defs";
+import { BUILDINGS, HUNTERS, MOB_NAMES, armorFor, weaponFor, type BuildingKey } from "@/lib/game/village/defs";
 import type { FightEvent, Unit } from "@/lib/game/village/sim";
 import { actorSize, animLength, drawActor, drawGround, loadSprites, type Dir } from "./sprites";
 
@@ -16,12 +16,20 @@ export interface SceneInput {
   bld: Record<BuildingKey, number>;
   daRunning: boolean;
   anyTrained: boolean;
+  gear: Record<string, { w: number; a: number }>;
+  hitmarkers: boolean;       // damage numbers and hit marks over the art (a setting)
 }
 type Pt = { x: number; y: number };
 interface Walker extends Pt { tx: number; ty: number; dir: Dir; speed: number; moving: boolean }
-interface Hunter extends Walker { k: string; state: "walk" | "fight" | "rest" | "sleep"; cd: number; lunge: number; flash: number; rest: number; wait: number; target: Mob | null; slot: number }
-interface Mob extends Walker { ico: string; i: number; hp: number; max: number; flash: number; dead: number; think: number }
-interface Fx { x: number; y: number; text?: string; actor?: string; color?: string; size: number; life: number; max: number; vy: number }
+interface Hunter extends Walker {
+  k: string; state: "walk" | "fight" | "gather" | "rest" | "sleep"; cd: number; lunge: number; flash: number; rest: number; wait: number;
+  target: Mob | null; slot: number;
+  gather: number;            // index into props while chopping or mining, else -1
+  swings: number;            // swings left on the current tree or rock
+  knock: number; kx: number; ky: number; hitAt: number;   // being hit: knockback timer and direction, last hit time
+}
+interface Mob extends Walker { ico: string; i: number; hp: number; max: number; flash: number; dead: number; think: number; cd: number; lunge: number; lx: number; ly: number }
+interface Fx { x: number; y: number; text?: string; actor?: string; mark?: boolean; ring?: string; color?: string; size: number; life: number; max: number; vy: number }
 interface Fight {
   units: Unit[]; boss: { ico: string; name: string; hp: number; z: number }; log: FightEvent[]; win: boolean; timeout: boolean;
   t: number; i: number; speed: number; bhp: number; hp: number[]; lunge: number[]; flash: number[]; bflash: number; end: number; onDone: () => void;
@@ -44,6 +52,10 @@ const ZONE_LOOK: [string, string, string[]][] = [
   ["grass", "#9db04a", ["pinktree", "tree", "oliveTree"]],
 ];
 const BLD_SLOTS: BuildingKey[] = ["inn", "kitchen", "forge", "market"];
+// Floating numbers: light fill with a dark outline, the classic game style that reads on any ground.
+const NUM = { hit: "#FFFDF9", crit: "#FFD166", hurt: "#FF9A8B", miss: "#D9D3C7", outline: "rgba(24,20,16,0.92)" };
+// Words (messages, boss names, results) sit on a solid paper plate instead of floating over the art.
+const PLATE = { bg: "rgba(255,253,249,0.94)", border: "rgba(31,27,22,0.16)", text: "#1F1B16", good: "#2E6B4E", bad: "#9C4A46" };
 const dirTo = (dx: number, dy: number): Dir => Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "up" : "down");
 
 export class VillageScene {
@@ -166,7 +178,42 @@ export class VillageScene {
     if (!document.hidden && this.visible) this.raf = requestAnimationFrame(this.loop);
   };
 
-  private addText(x: number, y: number, text: string, color: string, size = 11) { this.fx.push({ x, y, text, color, size, life: 0, max: 1.1, vy: -26 }); }
+  private addText(x: number, y: number, text: string, color: string, size = 11) {
+    if (this.input?.hitmarkers === false) return;
+    this.fx.push({ x, y, text, color, size, life: 0, max: 1.1, vy: -26 });
+  }
+  /** The little X where a hit lands. */
+  private addMark(x: number, y: number, crit: boolean) {
+    if (this.input?.hitmarkers === false) return;
+    this.fx.push({ x, y, mark: true, color: crit ? NUM.crit : NUM.hit, size: crit ? 1.4 : 1, life: 0, max: 0.2, vy: 0 });
+  }
+  /** Sparkles and a ring on a hunter who just got better gear. */
+  celebrate(k: string) {
+    const h = this.hs[k];
+    if (!h) return;
+    const tier = armorFor((this.input?.gear[k] ?? { a: 0 }).a).color || "#FFD166";
+    this.fx.push({ x: h.x, y: h.y, ring: tier, size: 1, life: 0, max: 0.9, vy: 0 });
+    this.addActorFx(h.x, h.y - 4 * this.S, "fx:spark");
+    this.addActorFx(h.x + 6 * this.S, h.y - 12 * this.S, "fx:spark");
+  }
+  /** What each hunter is doing right now, for the hunter cards. */
+  actions(): Record<string, string> {
+    const out: Record<string, string> = {}, inp = this.input;
+    if (!inp) return out;
+    const names = MOB_NAMES[zoneIdx(inp.zone.z) - 1];
+    if (this.fight) { Object.keys(inp.units).forEach(k => { out[k] = "Fighting the zone boss"; }); return out; }
+    Object.values(this.hs).forEach(h => {
+      out[h.k] = h.state === "sleep" ? "Asleep. Out of food."
+        : h.state === "rest" ? "Resting at the inn"
+        : h.state === "gather" ? (/rock/.test(this.props[h.gather]?.id ?? "") ? "Mining stone" : "Chopping wood")
+        : h.gather >= 0 ? "Heading to gather"
+        : h.state === "fight" && h.target && this.clock - h.hitAt < 0.9 ? `Taking a hit from a ${names[h.target.i] ?? "monster"}`
+        : h.state === "fight" && h.target ? `Attacking a ${names[h.target.i] ?? "monster"}`
+        : h.rest <= 0 ? "Heading back to the inn"
+        : h.target ? `Going after a ${names[h.target.i] ?? "monster"}` : `Scouting ${inp.zone.name}`;
+    });
+    return out;
+  }
   private addActorFx(x: number, y: number, actor: string, rise = 0) { this.fx.push({ x, y, actor, size: 1, life: 0, max: Math.max(0.35, animLength(actor)), vy: rise }); }
 
   private walk(e: Walker, dt: number) {
@@ -187,14 +234,15 @@ export class VillageScene {
     Object.keys(units).forEach((k, i) => {
       if (this.hs[k]) return;
       this.hs[k] = { k, x: inn.x + (i % 3 - 1) * 10 * this.S, y: inn.y + 4 * this.S, tx: inn.x, ty: inn.y, dir: "down", speed: 26 + Math.random() * 10,
-                     moving: false, state: "walk", cd: Math.random(), lunge: 0, flash: 0, rest: 25 + Math.random() * 30, wait: 0, target: null, slot: i };
+                     moving: false, state: "walk", cd: Math.random(), lunge: 0, flash: 0, rest: 25 + Math.random() * 30, wait: 0, target: null, slot: i,
+                     gather: -1, swings: 0, knock: 0, kx: 0, ky: 0, hitAt: -9 };
     });
   }
   private spawnMob() {
     const inp = this.input!, i = Math.floor(Math.random() * inp.zone.mobs.length), p = this.fieldPoint();
     const hp = Math.max(30, (inp.dps || 30) * 2.4 / Math.max(inp.eff || 0.2, 0.15));
     this.mobs.push({ ico: inp.zone.mobs[i], i, ...p, tx: p.x, ty: p.y, dir: "down", speed: 9 + Math.random() * 6, moving: false,
-                     hp, max: hp, flash: 0, dead: 0, think: Math.random() * 3 });
+                     hp, max: hp, flash: 0, dead: 0, think: Math.random() * 3, cd: 1 + Math.random(), lunge: 0, lx: 0, ly: 0 });
   }
 
   private step(dt: number) {
@@ -208,12 +256,18 @@ export class VillageScene {
     const want = inp.fed ? Math.min(2 + Math.ceil(hunters.length / 2), 6) : 3;
     this.spawn -= dt;
     if (this.mobs.filter(m => !m.dead).length < want && this.spawn <= 0) { this.spawnMob(); this.spawn = 1 + Math.random() * 1.5; }
-    // monsters wander unless someone is fighting them
+    // monsters wander, and hit back at whoever is fighting them
     this.mobs.forEach(m => {
       if (m.flash > 0) m.flash -= dt;
+      if (m.lunge > 0) m.lunge -= dt;
       if (m.dead) { m.dead += dt; return; }
-      const engaged = hunters.some(h => h.state === "fight" && h.target === m);
-      if (engaged) { m.tx = m.x; m.ty = m.y; m.moving = false; return; }
+      const foe = hunters.find(h => h.state === "fight" && h.target === m);
+      if (foe) {
+        m.tx = m.x; m.ty = m.y; m.moving = false; m.dir = dirTo(foe.x - m.x, foe.y - m.y);
+        m.cd -= dt;
+        if (m.cd <= 0) this.mobHits(m, foe);
+        return;
+      }
       m.think -= dt;
       if (m.think <= 0) { const p = this.fieldPoint(); m.tx = m.x + (p.x - m.x) * 0.35; m.ty = m.y + (p.y - m.y) * 0.35; m.think = 2 + Math.random() * 3; }
       this.walk(m, dt);
@@ -224,48 +278,118 @@ export class VillageScene {
       const u = inp.units[h.k];
       if (h.lunge > 0) h.lunge -= dt;
       if (h.flash > 0) h.flash -= dt;
+      if (h.knock > 0) h.knock -= dt;
       const bed = { x: inn.x + ((h.slot % 4) - 1.5) * 9 * this.S, y: inn.y + (4 + Math.floor(h.slot / 4) * 9) * this.S };
-      if (!inp.fed) { h.target = null; h.tx = bed.x; h.ty = bed.y; h.state = this.walk(h, dt) ? "sleep" : "walk"; if (h.state === "sleep") h.dir = "down"; return; }
+      if (!inp.fed) { h.target = null; h.gather = -1; h.tx = bed.x; h.ty = bed.y; h.state = this.walk(h, dt) ? "sleep" : "walk"; if (h.state === "sleep") h.dir = "down"; return; }
       if (h.state === "rest") { h.wait -= dt; if (h.wait <= 0) { h.state = "walk"; h.rest = 25 + Math.random() * 30; } return; }
       h.rest -= dt;
       if (h.rest <= 0) {       // a breather at the inn, like hunters in Evil Hunter Tycoon
-        h.target = null; h.tx = bed.x; h.ty = bed.y;
+        h.target = null; h.gather = -1; h.tx = bed.x; h.ty = bed.y;
         if (this.walk(h, dt)) { h.state = "rest"; h.dir = "down"; h.wait = 2.5 + Math.random() * 2; } else h.state = "walk";
         return;
       }
+      if (h.gather >= 0) return this.gatherStep(h, dt);
       if (!h.target || h.target.dead) {
         const load = (m: Mob) => hunters.filter(o => o.target === m).length;
-        h.target = this.mobs.filter(m => !m.dead).sort((a, b) => load(a) - load(b) || Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0] || null;
+        const free = this.mobs.filter(m => !m.dead && load(m) < 2);
+        // no monster worth chasing (or a breather between fights): gather from a tree or rock instead
+        if (!free.length || (h.target === null && Math.random() < 0.004)) { if (this.startGather(h, hunters)) return; }
+        const next = free.sort((a, b) => load(a) - load(b) || Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0] || null;
+        if (next && next !== h.target) this.addEmote(h, "emote:alert");
+        h.target = next;
       }
       const m = h.target;
       if (!m) { h.state = "walk"; if (this.walk(h, dt)) { const p = this.fieldPoint(); h.tx = p.x; h.ty = p.y; } return; }
       const side = (h.slot % 2 ? 1 : -1) * (h.x < m.x ? 1 : -1);
       h.tx = m.x - side * 13 * this.S; h.ty = m.y + ((h.slot % 3) - 1) * 3 * this.S;
-      if (!this.walk(h, dt)) { h.state = "walk"; return; }
+      if (h.knock <= 0 && !this.walk(h, dt)) { h.state = "walk"; return; }
       h.state = "fight"; h.dir = dirTo(m.x - h.x, m.y - h.y); h.cd -= dt;
       if (h.cd > 0 || !u) return;
       h.cd = 1 / u.spd; h.lunge = 0.18; m.flash = 0.12;
       const crit = Math.random() < u.crit, dmg = u.atk * (crit ? u.cdmg : 1) * (0.9 + 0.2 * Math.random());
       m.hp -= dmg;
       this.addActorFx(m.x, m.y + 2 * this.S, "fx:slash");
-      this.addText(m.x + (Math.random() - 0.5) * 8 * this.S, m.y - 18 * this.S, fmtN(dmg), crit ? this.ink.warn : this.ink.text, crit ? 13 : 11);
+      this.addMark(m.x + (Math.random() - 0.5) * 6 * this.S, m.y - 8 * this.S, crit);
+      this.addText(m.x + (Math.random() - 0.5) * 8 * this.S, m.y - 18 * this.S, fmtN(dmg), crit ? NUM.crit : NUM.hit, crit ? 14 : 12);
       if (m.hp <= 0) {
         m.dead = 0.001; h.target = null;
         this.addActorFx(m.x, m.y, "fx:smoke");
         this.addActorFx(m.x, m.y - 8 * this.S, "fx:coin", -22);
+        if (Math.random() < 0.3) this.startGather(h, hunters);     // between fights, gather a little
       }
     });
   }
 
+  /** A monster strikes the hunter fighting it: it lunges, the hunter flashes and is knocked back. */
+  private mobHits(m: Mob, h: Hunter) {
+    m.cd = 1.3 + Math.random() * 0.9; m.lunge = 0.18;
+    const dx = h.x - m.x, dy = h.y - m.y, d = Math.hypot(dx, dy) || 1;
+    m.lx = dx / d; m.ly = dy / d;
+    h.flash = 0.22; h.knock = 0.16; h.kx = dx / d; h.ky = dy / d; h.hitAt = this.clock;
+    const u = this.input!.units[h.k], dmg = (u?.hp ?? 100) * (0.03 + Math.random() * 0.05);
+    this.addMark(h.x, h.y - 8 * this.S, false);
+    this.addText(h.x + (Math.random() - 0.5) * 6 * this.S, h.y - 20 * this.S, "-" + fmtN(dmg), NUM.hurt, 11);
+  }
+
+  /** Pick the nearest tree or rock in the field nobody else is working on. */
+  private startGather(h: Hunter, hunters: Hunter[]) {
+    const L = this.lay(), taken = new Set(hunters.filter(o => o !== h).map(o => o.gather));
+    const options = this.props.map((p, i) => ({ p, i })).filter(({ p, i }) => p.x > L.f0 && p.y > L.top && p.y < L.bottom + 4 * L.S && !taken.has(i));
+    if (!options.length) return false;
+    const { i } = options.sort((a, b) => Math.hypot(a.p.x - h.x, a.p.y - h.y) - Math.hypot(b.p.x - h.x, b.p.y - h.y))[0];
+    h.gather = i; h.swings = 4 + Math.floor(Math.random() * 3); h.target = null; h.cd = 0.3;
+    return true;
+  }
+  /** Walk up to the tree or rock, swing at it, and bring home wood, stone or the odd gem. */
+  private gatherStep(h: Hunter, dt: number) {
+    const p = this.props[h.gather], rock = /rock/.test(p.id), stump = /stump/.test(p.id);
+    const sideX = h.slot % 2 ? 1 : -1;
+    h.tx = p.x + sideX * 12 * this.S; h.ty = p.y + 3 * this.S;
+    if (!this.walk(h, dt)) { h.state = "walk"; return; }
+    h.state = "gather"; h.dir = sideX > 0 ? "left" : "right";
+    h.cd -= dt;
+    if (h.cd > 0) return;
+    h.cd = 0.6; h.lunge = 0.18; h.swings--;
+    this.addActorFx(p.x + (Math.random() - 0.5) * 6 * this.S, p.y - 6 * this.S, rock ? "fx:rock" : stump ? "fx:wood" : "fx:leaf");
+    if (h.swings > 0) return;
+    const res = rock ? (Math.random() < 0.12 ? "res:gem" : "res:stone") : "res:wood";
+    this.addActorFx(p.x, p.y - 14 * this.S, res, -18);
+    this.addText(p.x, p.y - 30 * this.S, rock ? (res === "res:gem" ? "+gem" : "+stone") : "+wood", NUM.crit, 11);
+    h.gather = -1;
+  }
+  private addEmote(h: Hunter, id: string) { this.fx.push({ x: h.x + 6 * this.S, y: h.y - 16 * this.S, actor: id, size: 1, life: 0, max: 0.8, vy: -6 }); }
+
   private sprite(id: string, emoji: string, x: number, y: number, anim = "idle", dir: Dir = "down", alpha = 1, scale = 1, t = this.clock) {
     drawActor(this.ctx!, id, emoji, x, y, { anim, dir, t, scale: this.S * scale, alpha });
   }
-  private text(s: string, x: number, y: number, color: string, size = 11) {
+  private font(size: number) { return `700 ${size}px "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif`; }
+  /** A floating number: light fill, crisp dark outline. */
+  private num(s: string, x: number, y: number, color: string, size = 12) {
     const c = this.ctx!;
-    c.font = `700 ${size}px var(--font-sans), "Instrument Sans", system-ui, sans-serif`;
-    c.textAlign = "center"; c.textBaseline = "bottom"; c.lineJoin = "round";
-    c.lineWidth = 3; c.strokeStyle = "rgba(255,253,249,0.9)"; c.strokeText(s, x, y);
+    c.font = this.font(size);
+    c.textAlign = "center"; c.textBaseline = "bottom"; c.lineJoin = "round"; c.miterLimit = 2;
+    c.lineWidth = 3.5; c.strokeStyle = NUM.outline; c.strokeText(s, x, y);
     c.fillStyle = color; c.fillText(s, x, y);
+  }
+  /** Words on a solid rounded plate, centered on (x, y). */
+  private label(s: string, x: number, y: number, size = 12, color = PLATE.text) {
+    const c = this.ctx!;
+    c.font = this.font(size);
+    const w = c.measureText(s).width + size * 1.4, h = size * 2;
+    const x0 = Math.max(4, Math.min(this.W - w - 4, x - w / 2)), y0 = y - h / 2;
+    c.fillStyle = PLATE.bg; c.strokeStyle = PLATE.border; c.lineWidth = 1;
+    c.beginPath(); c.roundRect(x0, y0, w, h, h / 2); c.fill(); c.stroke();
+    c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = color;
+    c.fillText(s, x0 + w / 2, y0 + h / 2 + 0.5);
+  }
+  /** A label that wraps onto two plates when it's wider than `max`. */
+  private wrapLabel(s: string, x: number, y: number, max: number) {
+    const c = this.ctx!;
+    c.font = this.font(12);
+    if (c.measureText(s).width + 17 <= max) return this.label(s, x, y);
+    const words = s.split(" "); let a = "";
+    while (words.length && c.measureText(a + " " + words[0]).width + 17 <= max) a = (a ? a + " " : "") + words.shift();
+    this.label(a, x, y - 14); this.label(words.join(" "), x, y + 14);
   }
   private hpBar(x: number, y: number, w: number, frac: number, col: string) {
     const c = this.ctx!;
@@ -299,16 +423,18 @@ export class VillageScene {
     else {
       this.mobs.forEach(m => list.push({ y: m.y, draw: () => {
         const id = `mob:${zi}:${m.i}${alt ? ":alt" : ""}`;
-        this.sprite(id, m.ico, m.x, m.y, m.moving ? "walk" : "idle", m.dir, m.dead ? Math.max(0, 1 - m.dead * 2.4) : 1);
+        const ml = m.lunge > 0 ? 4 * this.S : 0;
+        this.sprite(id, m.ico, m.x + m.lx * ml, m.y + m.ly * ml, m.moving || m.lunge > 0 ? "walk" : "idle", m.dir, m.dead ? Math.max(0, 1 - m.dead * 2.4) : 1);
         if (m.flash > 0) this.flashAt(m.x, m.y, "rgba(255,255,255,0.55)");
         if (!m.dead && m.hp < m.max) this.hpBar(m.x, m.y - 19 * this.S, 14 * this.S, m.hp / m.max, this.ink.crit);
       } }));
       Object.values(this.hs).forEach(h => list.push({ y: h.y, draw: () => {
         const sleeping = h.state === "sleep" || h.state === "rest";
         const anim = h.lunge > 0 ? "attack" : h.moving ? "walk" : "idle";
-        const lx = h.lunge > 0 ? ({ left: -3, right: 3, up: 0, down: 0 }[h.dir]) * this.S : 0;
-        const ly = h.lunge > 0 ? ({ up: -3, down: 3, left: 0, right: 0 }[h.dir]) * this.S : 0;
-        this.sprite("hunter:" + h.k, HUNTERS[h.k]?.ico ?? "🧍", h.x + lx, h.y + ly, anim, h.dir, 1, 1, this.clock + h.slot * 0.13);
+        const kb = h.knock > 0 ? (h.knock / 0.16) * 4 * this.S : 0;
+        const lx = (h.lunge > 0 ? ({ left: -3, right: 3, up: 0, down: 0 }[h.dir]) * this.S : 0) + h.kx * kb;
+        const ly = (h.lunge > 0 ? ({ up: -3, down: 3, left: 0, right: 0 }[h.dir]) * this.S : 0) + h.ky * kb;
+        this.drawHunter(h.k, h.x + lx, h.y + ly, anim, h.dir, h.lunge > 0, 1, this.clock + h.slot * 0.13);
         if (h.flash > 0) this.flashAt(h.x, h.y, "rgba(156,74,70,0.4)");
         if (sleeping) this.sprite(h.state === "sleep" ? "emote:sleep" : "emote:heart", h.state === "sleep" ? "💤" : "❤️",
                                   h.x + 6 * this.S, h.y - 16 * this.S - (REDUCED ? 0 : Math.abs(Math.sin(this.clock * 2 + h.slot)) * 2 * this.S));
@@ -317,8 +443,20 @@ export class VillageScene {
     list.sort((a, b) => a.y - b.y).forEach(d => d.draw());
     this.fx.forEach(f => {
       const a = Math.max(0, 1 - f.life / f.max);
-      if (f.actor) drawActor(ctx, f.actor, "✨", f.x, f.y, { t: f.life, scale: this.S, once: true, alpha: f.actor === "fx:coin" ? a : 1 });
-      else if (f.text) { ctx.save(); ctx.globalAlpha = a; this.text(f.text, f.x, f.y, f.color ?? this.ink.text, f.size); ctx.restore(); }
+      if (f.mark) {
+        const r = (3 + f.life * 22) * this.S * 0.5 * f.size, g = 3 * this.S * f.size * 0.5;
+        ctx.save(); ctx.lineCap = "round";
+        for (const [w, col] of [[4, NUM.outline], [2, f.color!]] as const) {
+          ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+          for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { ctx.moveTo(f.x + dx * g, f.y + dy * g); ctx.lineTo(f.x + dx * (g + r), f.y + dy * (g + r)); }
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else if (f.ring) {
+        ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = f.ring; ctx.lineWidth = 2 * this.S;
+        ctx.beginPath(); ctx.ellipse(f.x, f.y - this.S, (7 + f.life * 16) * this.S, (2.6 + f.life * 6) * this.S, 0, 0, 7); ctx.stroke(); ctx.restore();
+      } else if (f.actor) drawActor(ctx, f.actor, "✨", f.x, f.y, { t: f.life, scale: this.S, once: true, alpha: f.actor === "fx:coin" ? a : 1 });
+      else if (f.text) { ctx.save(); ctx.globalAlpha = a; this.num(f.text, f.x, f.y, f.color ?? NUM.hit, f.size); ctx.restore(); }
     });
     if (!this.fight) {
       const msg = !Object.keys(this.hs).length
@@ -326,10 +464,27 @@ export class VillageScene {
         : !inp.fed ? "Out of food. One application wakes them up." : "";
       if (msg) {
         ctx.fillStyle = "rgba(20,24,40,0.18)"; ctx.fillRect(L.town + 4 * L.S, 0, L.W, L.H);
-        this.text(msg, (L.f0 + L.f1) / 2, L.H / 2, this.ink.text, 12);
+        this.wrapLabel(msg, (L.f0 + L.f1) / 2, L.H / 2, L.f1 - L.f0 - 12);
       }
     }
     ctx.restore();
+  }
+  /** A hunter with their armor's rim under their feet and their weapon in hand (it swings on a hit). */
+  private drawHunter(k: string, x: number, y: number, anim: string, dir: Dir, swing: boolean, alpha: number, t = this.clock) {
+    const c = this.ctx!, S = this.S, g = this.input?.gear[k] ?? { w: 0, a: 0 }, h = HUNTERS[k];
+    const rim = armorFor(g.a).color;
+    if (rim) {
+      c.save(); c.globalAlpha = 0.85 * alpha; c.strokeStyle = rim; c.lineWidth = Math.max(1.5, S * 0.9);
+      c.beginPath(); c.ellipse(x, y - S, 7 * S, 2.6 * S, 0, 0, 7); c.stroke(); c.restore();
+    }
+    const [weapon] = h ? weaponFor(h.cls, g.w) : ["Stick"];
+    const side = dir === "left" ? -1 : 1, behind = dir === "up";
+    const wx = x + (dir === "up" ? -5 : dir === "down" ? 6 : 6 * side) * S, wy = y - 4 * S;
+    const rot = (swing ? 1.1 : 0.35) * side;
+    const drawWeapon = () => drawActor(c, "weapon:" + weapon, "", wx, wy, { scale: S * 0.72, rotate: rot, alpha, flip: side < 0 });
+    if (behind) drawWeapon();
+    this.sprite("hunter:" + k, h?.ico ?? "🧍", x, y, anim, dir, alpha, 1, t);
+    if (!behind) drawWeapon();
   }
   private flashAt(x: number, y: number, col: string) {
     const c = this.ctx!;
@@ -342,7 +497,9 @@ export class VillageScene {
                    hp: units.map(u => u.hp), lunge: units.map(() => 0), flash: units.map(() => 0), bflash: 0, end: 0, onDone };
     this.wake();
   }
-  private bossAt(): Pt { const L = this.lay(); return { x: L.f0 + (L.f1 - L.f0) * 0.74, y: L.H * 0.66 }; }
+  private bossAt(): Pt { const L = this.lay(); return { x: L.f0 + (L.f1 - L.f0) * 0.74, y: L.H * 0.8 }; }
+  /** Bosses are drawn smaller when the map is short, so their name and health always fit above them. */
+  private bossScale(id: string) { return Math.min(1, (this.H * 0.52) / (actorSize(id).h * this.S)); }
   private fightPos(i: number): Pt {
     const L = this.lay(), f = this.fight!, u = f.units[i];
     const row = f.units.filter(x => x.row === u.row), j = row.indexOf(u), n = row.length;
@@ -352,7 +509,7 @@ export class VillageScene {
     return { x: x - (j % 2) * 4 * L.S, y: b.y - span / 2 + (n > 1 ? j * span / (n - 1) : span / 2) };
   }
   private fightStep(dt: number) {
-    const f = this.fight!, b = this.bossAt(), bh = actorSize(`boss:${zoneIdx(f.boss.z)}`).h * this.S;
+    const f = this.fight!, b = this.bossAt(), bid = `boss:${zoneIdx(f.boss.z)}`, bh = actorSize(bid).h * this.S * this.bossScale(bid);
     f.lunge = f.lunge.map(x => Math.max(0, x - dt)); f.flash = f.flash.map(x => Math.max(0, x - dt)); f.bflash = Math.max(0, f.bflash - dt);
     if (f.end) { f.end -= dt; if (f.end <= 0) { this.fight = null; f.onDone(); } return; }
     f.t += dt * f.speed;
@@ -360,13 +517,18 @@ export class VillageScene {
       const e = f.log[f.i++];
       if (e.a === "hit") {
         f.lunge[e.i] = 0.15; f.bhp = e.bhp; f.hp[e.i] = e.hp;
-        if (!e.miss) { f.bflash = 0.15; this.addActorFx(b.x + (Math.random() - 0.5) * 16 * this.S, b.y - bh * 0.3, "fx:slash"); }
+        if (!e.miss) {
+          f.bflash = 0.15;
+          const mx = b.x + (Math.random() - 0.5) * 16 * this.S, my = b.y - bh * (0.25 + Math.random() * 0.3);
+          this.addActorFx(mx, my + 8 * this.S, "fx:slash");
+          this.addMark(mx, my, e.crit);
+        }
         this.addText(b.x + (Math.random() - 0.5) * 30 * this.S, b.y - bh - 2 * this.S - Math.random() * 8 * this.S,
-                     e.miss ? "miss" : fmtN(e.dmg), e.miss ? this.ink.text : e.crit ? this.ink.warn : this.ink.text, e.crit ? 14 : 11);
+                     e.miss ? "miss" : fmtN(e.dmg), e.miss ? NUM.miss : e.crit ? NUM.crit : NUM.hit, e.crit ? 15 : 12);
       } else if (e.a === "boss") {
         f.hp[e.i] = e.hp; f.flash[e.i] = 0.25;
         const p = this.fightPos(e.i);
-        this.addText(p.x, p.y - 18 * this.S, "-" + fmtN(e.dmg), this.ink.crit, 11);
+        this.addText(p.x, p.y - 18 * this.S, "-" + fmtN(e.dmg), NUM.hurt, 12);
       } else {
         f.hp = e.hps.slice(); f.flash = f.flash.map(() => 0.3); this.shake = 0.3;
         f.units.forEach((_, i) => { const p = this.fightPos(i); this.addActorFx(p.x, p.y, "fx:smoke"); });
@@ -375,23 +537,23 @@ export class VillageScene {
     if (f.i >= f.log.length) f.end = 2.4;
   }
   private collectFight(list: { y: number; draw: () => void }[], zi: number, alt: boolean) {
-    const f = this.fight!, b = this.bossAt(), id = `boss:${zi}${alt ? ":alt" : ""}`, bh = actorSize(id).h * this.S;
+    const f = this.fight!, b = this.bossAt(), id = `boss:${zi}${alt ? ":alt" : ""}`, bs = this.bossScale(id), bh = actorSize(id).h * this.S * bs;
     list.push({ y: b.y, draw: () => {
-      this.sprite(id, f.boss.ico, b.x, b.y, f.bflash > 0 ? "hurt" : "idle", "down", f.end && f.win ? Math.max(0, f.end / 2.4) : 1);
+      this.sprite(id, f.boss.ico, b.x, b.y, f.bflash > 0 ? "hurt" : "idle", "down", f.end && f.win ? Math.max(0, f.end / 2.4) : 1, bs);
       this.hpBar(b.x, b.y - bh - 6 * this.S, 44 * this.S, f.bhp / f.boss.hp, this.ink.crit);
-      this.text(f.boss.name, b.x, b.y - bh - 8 * this.S, this.ink.text, 11);
+      this.label(f.boss.name, b.x, b.y - bh - 14 * this.S, 11);
     } });
     f.units.forEach((u, i) => {
       const p = this.fightPos(i), dead = f.hp[i] <= 0;
       list.push({ y: p.y, draw: () => {
-        this.sprite("hunter:" + u.k, HUNTERS[u.k]?.ico ?? "🧍", p.x + (f.lunge[i] > 0 ? 3 * this.S : 0), p.y, f.lunge[i] > 0 ? "attack" : "idle", "right", dead ? 0.3 : 1);
+        this.drawHunter(u.k, p.x + (f.lunge[i] > 0 ? 3 * this.S : 0), p.y, f.lunge[i] > 0 ? "attack" : "idle", "right", f.lunge[i] > 0, dead ? 0.3 : 1);
         if (f.flash[i] > 0 && !dead) this.flashAt(p.x, p.y, "rgba(156,74,70,0.4)");
         if (!dead) this.hpBar(p.x, p.y + 2 * this.S, 14 * this.S, f.hp[i] / u.hp, this.ink.good);
       } });
     });
     if (f.end) list.push({ y: 1e9, draw: () => {
       const L = this.lay();
-      this.text(f.win ? "Victory" : f.timeout ? "Out of time" : "Defeated", (L.f0 + L.f1) / 2, L.H * 0.28, f.win ? this.ink.good : this.ink.crit, 22);
+      this.label(f.win ? "Victory" : f.timeout ? "Out of time" : "Defeated", (L.f0 + L.f1) / 2, L.H * 0.24, 20, f.win ? PLATE.good : PLATE.bad);
     } });
   }
 }

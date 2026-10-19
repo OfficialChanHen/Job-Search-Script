@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { confetti, copyText, floatFood, floatXP, toast } from "@/lib/client/effects";
+import { copyText, floatFood, floatXP, toast } from "@/lib/client/effects";
 import { loadSheetRows } from "@/lib/client/sheetRows";
 import { FOLLOW_UP_DAYS, followMsg, followUps, liSearch } from "@/lib/game/followups";
 import { paceStats } from "@/lib/game/pace";
@@ -96,7 +96,6 @@ function Tools() {
     try {
       const s = importLegacy(store, parseBackup(await f.text()));
       toast(`Imported ${s.applied} applications, ${s.solved} solved problems and ${s.badges} badges` + (s.village ? ", plus your village." : "."));
-      confetti(100);
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't read that file", true); }
   };
   const item = (title: string, sub: string, onClick: () => void) => (

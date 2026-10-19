@@ -38,7 +38,7 @@ function Deck({ initial, data, store, solved, close }: { initial: Job[]; data: J
   const j = deck[i];
 
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []);
-  useEffect(() => { if (!j && deck.length) confetti(200); }, [j, deck.length]);
+  useEffect(() => { if (!j && deck.length) confetti(100); }, [j, deck.length]);
 
   const next = (dir: "left" | "up" | "right", xp: number) => {
     const now = Date.now();
@@ -47,7 +47,6 @@ function Deck({ initial, data, store, solved, close }: { initial: Job[]; data: J
     addTriage(store);
     const r = card.current?.getBoundingClientRect();
     if (r) floatText(`+${xp + 2} XP`, undefined, 0);
-    if (c > 0 && c % 10 === 0) confetti(90);
     busy.current = true; setFly("fly-" + dir);
     setTimeout(() => { setI(x => x + 1); setFly(""); setConfirming(false); busy.current = false; }, REDUCED ? 0 : 230);
   };

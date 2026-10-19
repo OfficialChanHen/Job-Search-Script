@@ -4,6 +4,7 @@ import { floatText, toast } from "@/lib/client/effects";
 import { getScene } from "@/lib/client/scene";
 import { loadSprites } from "@/lib/client/sprites";
 import { daRun, startDA, stopDA } from "@/lib/game/da";
+import { NS } from "@/lib/game/progress";
 import { followUps } from "@/lib/game/followups";
 import { dueReviews } from "@/lib/game/reviews";
 import {
@@ -45,6 +46,7 @@ export function useScene(g: Game, live: VillageState | null, host: React.RefObje
       units: Object.fromEntries(p.units.map(u => [u.k, u])), fed: huntHours(live, g.p) > 0 && p.units.length > 0,
       eff: efficiency(p, live.zone), dps: p.dps, zone: zoneDef(live.zone), bld: live.bld, daRunning: !!g.p.daRun.run,
       anyTrained: hunterKeys(g.data.topics).some(k => trained(g.ctx, k)),
+      gear: live.gear, hitmarkers: g.store.get<boolean>(NS.pref, "hitmarkers") !== false,
     });
   }, [g, live]);
 }
@@ -127,7 +129,7 @@ export default function GamePanel() {
       </section>
 
       <button className={"da" + (run ? " on" : "")} onClick={() => toggleDA(g.store, live)}>
-        <span><b>DataAnnotation</b><span className="sub">{run ? "Working. Tap to stop and log it." : "Start the timer when you start a task."}</span></span>
+        <span><b>DataAnnotation</b><span className="sub">{run ? "Tap to stop and log it" : "Tap when you start a task"}</span></span>
         <span className="num">{run ? fmtClock(now - run) : "Start"}</span>
       </button>
 

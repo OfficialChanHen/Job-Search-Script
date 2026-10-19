@@ -70,7 +70,7 @@ export default function JobBoard() {
       <header className="jobs-head">
         <p className="eyebrow">Entry-level SWE and tech roles in the US</p>
         <h1 className="display">Find the role that <em>fits</em>.</h1>
-        <p className="sentence">{sentence}{(list.cooled + list.capped) > 0 && <span className="dim"> {list.cooled + list.capped} more are tucked away: companies you applied to lately, and a cap of 2 per company.</span>}</p>
+        <p className="sentence">{sentence}{(list.cooled + list.capped) > 0 && <span className="dim"> {list.cooled + list.capped} hidden from companies you&apos;ve applied to or already see twice.</span>}</p>
       </header>
 
       <div className="controls">
