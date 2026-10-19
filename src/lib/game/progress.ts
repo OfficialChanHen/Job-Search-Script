@@ -5,7 +5,7 @@
  * separate events or derived from the rows they count, never as a number
  * that both devices overwrite.                                            */
 import type { Store } from "@/lib/sync/store";
-import { REVIEW_GAPS } from "./reviews";
+import { REVIEW_GAPS, nextGap } from "./reviews";
 import { addDays, localDay } from "./time";
 
 export const NS = {
@@ -123,7 +123,7 @@ export function markReviewed(store: Store, n: number, now: Date = new Date()) {
   const k = String(n), r = store.get<RevEntry>(NS.rev, k) ?? { s: 0, due: null };
   const s = r.s + 1, d = localDay(now);
   store.batch(() => {
-    store.set(NS.rev, k, { s, due: s < REVIEW_GAPS.length ? addDays(d, REVIEW_GAPS[s]) : null });
+    store.set(NS.rev, k, { s, due: addDays(d, nextGap(s)) });
     store.set(NS.review, newId(), { n, d });
   });
 }

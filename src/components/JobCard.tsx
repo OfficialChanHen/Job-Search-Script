@@ -3,85 +3,56 @@ import { memo, useState } from "react";
 import type { Company, Job, Prep } from "@/lib/data/types";
 import { confetti, floatFood, floatXP, toast } from "@/lib/client/effects";
 import { NS, setStatus, toggleSolved, type JobStatus, type KitJob, type ResumeEntry, type SheetRow, type StatusEntry } from "@/lib/game/progress";
-import { FitBox, FitChip, KitPanel, RefPanel } from "./CardPanels";
 import { copySheetRow, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
 import type { Store } from "@/lib/sync/store";
+import { FitBox, FitChip, KitPanel, RefPanel } from "./CardPanels";
 
-const MODE = { onsite: "🏢 In-person", hybrid: "🔀 Hybrid", remote: "🌐 Remote", "": "" } as const;
+const MODE: Record<string, string> = { onsite: "In person", hybrid: "Hybrid", remote: "Remote" };
 const srcName = (s: string) => s.replace(/^GitHub\//, "").replace(/^JSearch\//, "");
 const XP_FOR: Record<string, number> = { applied: 50, saved: 10 };
+type Tab = "about" | "prep" | "kit" | "ref";
 
 export interface CardProps {
-  job: Job;
-  prep: Prep | undefined;
-  company: Company | undefined;
-  status: StatusEntry | undefined;
-  solved: Record<string, string>;
-  sheetRow: SheetRow | undefined;
-  latest: string;
-  store: Store;
-  sheetUrl: string;
-  synced: boolean;
-  resumes: ResumeEntry[];
-  kit: KitJob | undefined;
-  outreach: string | undefined;
+  job: Job; prep: Prep | undefined; company: Company | undefined; status: StatusEntry | undefined;
+  solved: Record<string, string>; sheetRow: SheetRow | undefined; latest: string; store: Store;
+  sheetUrl: string; synced: boolean; resumes: ResumeEntry[]; kit: KitJob | undefined; outreach: string | undefined;
 }
 
-function Chips({ j, latest, sheet, resumes }: { j: Job; latest: string; sheet: SheetRow | undefined; resumes: ResumeEntry[] }) {
-  const d = j.drive;
-  return (
-    <div className="badges">
-      {j.date === latest && <span className="chip flag-new">NEW</span>}
-      {j.direct && j.direct !== j.url && <span className="chip flag-direct" title="Found the posting on the company's own site">🔗 Company site</span>}
-      <span className={"chip " + (j.jobType === "Full-time" ? "type-ft" : "type-other")}>{j.jobType || "Type ?"}</span>
-      {MODE[j.mode] && <span className="chip flag-src">{MODE[j.mode]}</span>}
-      <span className="chip flag-src">{j.catLabel}</span>
-      {j.exp && <span className="chip flag-src">🎓 {j.exp}</span>}
-      {j.closed && <span className="chip flag-closed" title="No longer on the company's job board">⛔ Closed</span>}
-      {j.reposts >= 3 && <span className="chip flag-warn" title={`Same title, company and location posted on ${j.reposts} different days. High-volume hiring, or an evergreen listing. Worth a referral before applying.`}>🔁 Posted {j.reposts}×</span>}
-      {j.stale && <span className="chip flag-src" title="Found 30+ days ago and this source can't be re-checked. It may be filled.">📅 30+ days old</span>}
-      {sheet?.status && <span className="chip flag-sheet">📗 {sheet.status}</span>}
-      {d && <span className="chip flag-src" title={`From Shakopee: about ${d.mi} road miles each way, ${d.min} min round trip, $${d.cost.toFixed(2)} gas and wear per shift`}>🚗 {Math.round(d.mi)} mi, ${d.cost.toFixed(2)} a shift, {d.min} min round trip</span>}
-      {d && (d.eff != null
-        ? <span className={"chip " + (d.ok ? "type-ft" : "flag-warn")} title={`Pays $${d.pay?.toFixed(2)}/hr. Over a 4-hour shift, after gas and drive time: $${d.eff.toFixed(2)}/hr`}>💵 ${d.eff.toFixed(2)}/hr after driving{d.ok ? "" : " (borderline)"}</span>
-        : <span className="chip flag-src" title="The posting doesn't list pay. Check it before driving far.">💵 pay not listed</span>)}
-      <FitChip j={j} resumes={resumes} />
-      {j.gradWindow && <span className="chip flag-warn" title="New-grad posting. Check the required graduation window; many also accept grads within 12 to 24 months.">⚠ check grad window</span>}
-      {j.chips.map(c => <span key={c} className="chip">{c}</span>)}
-      <span className="chip muted">{j.source}, {j.date}</span>
-    </div>
-  );
+/** The one caution worth showing on the card itself; the rest live in the apply kit. */
+function warning(j: Job): string {
+  if (j.closed) return "Closed";
+  const y = parseInt(j.exp, 10);
+  if (!isNaN(y) && y >= 2) return `${y}+ years asked`;
+  if (j.gradWindow) return "Check the grad window";
+  if (j.reposts >= 3) return `Posted ${j.reposts} times`;
+  if (j.stale) return "Over 30 days old";
+  return "";
 }
 
-function SummaryPanel({ j, company, resumes }: { j: Job; company: Company | undefined; resumes: ResumeEntry[] }) {
+function About({ j, company, resumes, sheet }: { j: Job; company: Company | undefined; resumes: ResumeEntry[]; sheet: SheetRow | undefined }) {
   const m = j.sm || {};
   const list = (xs?: string[]) => xs?.length ? <ul>{xs.map((x, i) => <li key={i}>{x}</li>)}</ul> : null;
+  const d = j.drive;
   return (
-    <div className="sumbox three">
-      <div>
-        <h4>📄 The job</h4>
-        {m.sum || m.do || m.need ? <>
-          {m.sum && <p>{m.sum}</p>}
-          {m.do && <><h4>What you&apos;d do</h4>{list(m.do)}</>}
-          {m.need && <><h4>What they want</h4>{list(m.need)}</>}
-          <div className="kv">
-            {j.exp && <span className="chip flag-src">🎓 {j.exp}</span>}
-            {m.pay && <span className="chip type-ft">💵 {m.pay}</span>}
-            {(m.stack || []).map(t => <span key={t} className="chip">{t}</span>)}
-          </div>
-        </> : <p className="none">The full posting hasn&apos;t been read yet (that happens in the daily run). Open it with Apply.</p>}
-      </div>
-      <div>
-        <h4>🏢 {j.company || "The company"}</h4>
-        {company?.s ? <>
-          <p>{company.s}</p>
-          <div className="src">Source: {company.src === "Wikipedia" && company.u ? <a href={company.u} target="_blank" rel="noopener">Wikipedia</a> : "the job posting"}</div>
-        </> : <>
-          <p className="none">No company description found.</p>
-          <div className="src"><a href={`https://www.google.com/search?q=${encodeURIComponent(j.company + " company")}`} target="_blank" rel="noopener">Search {j.company} ↗</a></div>
-        </>}
-      </div>
-      <div><h4>🎯 Resume fit</h4><FitBox j={j} resumes={resumes} /></div>
+    <div className="about">
+      <section>
+        {m.sum ? <p>{m.sum}</p> : <p className="dim">The full posting hasn&apos;t been read yet. It&apos;s read during the morning run.</p>}
+        {m.do && <><h4 className="eyebrow">What you&apos;d do</h4>{list(m.do)}</>}
+        {m.need && <><h4 className="eyebrow">What they want</h4>{list(m.need)}</>}
+        <div className="chips-row">
+          {m.pay && <span className="tag good">{m.pay}</span>}
+          {(m.stack || j.chips).slice(0, 8).map(t => <span key={t} className="tag quiet">{t}</span>)}
+        </div>
+        {d && <p className="dim">{Math.round(d.mi)} miles from Shakopee, about {d.min} minutes round trip and ${d.cost.toFixed(2)} of gas a shift.
+          {d.eff != null ? ` After driving it pays about $${d.eff.toFixed(2)} an hour.` : " Pay isn't listed."}</p>}
+        <p className="dim">Found on {j.source} on {j.date}.{sheet?.status ? ` Your sheet says: ${sheet.status}.` : ""}</p>
+      </section>
+      <section>
+        <h4 className="eyebrow">{j.company || "The company"}</h4>
+        {company?.s ? <p>{company.s}</p> : <p className="dim">No description found. <a href={`https://www.google.com/search?q=${encodeURIComponent(j.company + " company")}`} target="_blank" rel="noopener">Search for {j.company}</a>.</p>}
+        <h4 className="eyebrow">Resume fit</h4>
+        <FitBox j={j} resumes={resumes} />
+      </section>
     </div>
   );
 }
@@ -94,22 +65,22 @@ function PrepPanel({ prep, solved, store }: { prep: Prep; solved: Record<string,
   };
   return (
     <div className="prep">
-      <div className="focus"><strong>{prep.coding ? "Coding interview likely." : "Usually no coding interview."}</strong> {prep.focus}</div>
+      <p><b>{prep.coding ? "A coding interview is likely." : "Usually no coding interview."}</b> {prep.focus}</p>
       {prep.problems.length ? <>
-        <ol>{prep.problems.map(([n, name, url]) => (
-          <li key={n} className={solved[n] ? "solved" : ""}>
+        <ul className="checks">{prep.problems.map(([n, name, url]) => (
+          <li key={n} className={solved[n] ? "done" : ""}>
             <label><input type="checkbox" checked={!!solved[n]} onChange={() => tick(n)} aria-label={`Mark #${n} solved`} />
               <a href={url} target="_blank" rel="noopener">#{n} {name}</a></label>
           </li>))}
-        </ol>
-        <div className="solved-note">Tick a problem when you solve it: +20 XP and 2 hours of food for your hunters. It stays ticked on every job.</div>
-      </> : <div className="none">No LeetCode needed for this role type.</div>}
+        </ul>
+        <p className="dim">Each solve is 20 XP, 2 hours of food, and training for that topic&apos;s hunter.</p>
+      </> : null}
     </div>
   );
 }
 
 function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, latest, store, sheetUrl, synced, resumes, kit, outreach }: CardProps) {
-  const [open, setOpen] = useState<{ sum?: boolean; prep?: boolean; kit?: boolean; ref?: boolean }>({});
+  const [tab, setTab] = useState<Tab | null>(null);
   const s = status?.s || "";
   const set = (next: JobStatus | "") => {
     setStatus(store, j.id, next);
@@ -117,46 +88,55 @@ function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, lates
     if (next === "applied" && s !== "applied") {
       floatFood(4);
       if (sheetUrl && !synced) pushToSheet(sheetUrl, j, prep)
-        .then(() => { store.set(NS.synced, j.id, 1); toast("✓ Added to Google Sheet: " + j.company); })
-        .catch(() => toast("Sheet sync failed. Check the URL.", true));
+        .then(() => { store.set(NS.synced, j.id, 1); toast("Added to your Google Sheet: " + j.company); })
+        .catch(() => toast("Couldn't add it to the sheet. Check the URL in Tools.", true));
     }
   };
   const copyRow = () => copySheetRow(sheetRow(j, prep, s === "saved" ? "Saved" : "Applied").map(String))
-    .then(() => toast("📋 Copied. Click a blank row's first cell in your sheet and paste."), () => toast("Copy failed", true));
-  const cls = (s === "applied" ? "job applied" : s === "saved" ? "job saved" : "job") + (j.closed ? " is-closed" : "");
+    .then(() => toast("Copied. Paste it into a blank row of your sheet."), () => toast("Couldn't copy", true));
+  const warn = warning(j), href = j.direct || j.url;
+  const tabs: [Tab, string][] = [["about", "About"], ["prep", prep?.coding ? "LeetCode" : "Prep"], ["kit", "Apply kit"], ["ref", outreach ? "Referral ✓" : "Referral"]];
   return (
-    <div className={cls}>
-      <div className={"score" + (j.score >= 10 ? " hot" : "")} title="Match score: skills, entry-level, full-time, in-person, direct company link">{j.score}<small>match</small></div>
-      <div>
-        <h3><a href={j.direct || j.url} target="_blank" rel="noopener">{j.title}</a></h3>
-        <div className="meta"><span className="co">{j.company || "—"}</span><span className="dot">📍</span>{j.location}</div>
-        <Chips j={j} latest={latest} sheet={sheet} resumes={resumes} />
-        <div className="actions">
-          <button className={s === "applied" ? "on-applied" : ""} onClick={() => set(s === "applied" ? "" : "applied")}>✓ Applied{s === "applied" && status ? " " + status.t.slice(5) : ""}</button>
-          <button className={s === "saved" ? "on-saved" : ""} onClick={() => set(s === "saved" ? "" : "saved")}>★ Save{s === "saved" ? "d" : ""}</button>
-          <button className={open.sum ? "on" : ""} onClick={() => setOpen(o => ({ ...o, sum: !o.sum }))}>📄 Summary</button>
-          <button className={open.prep ? "on" : ""} onClick={() => setOpen(o => ({ ...o, prep: !o.prep }))}>{prep?.coding ? "🧠 LeetCode prep" : "🧠 Interview prep"}</button>
-          <button className={open.kit ? "on" : ""} onClick={() => setOpen(o => ({ ...o, kit: !o.kit }))}>🎒 Apply kit</button>
-          <button className={open.ref ? "on" : ""} onClick={() => setOpen(o => ({ ...o, ref: !o.ref }))}>🤝 Referral{outreach ? " ✓" : ""}</button>
-          <button onClick={copyRow} title="Copy as a row for your Google Sheet">📋 Copy row</button>
-          <button onClick={() => set(s === "hidden" ? "" : "hidden")}>{s === "hidden" ? "↩ Unhide" : "Hide"}</button>
+    <article className={"job" + (s ? " " + s : "") + (j.closed ? " closed" : "")}>
+      <div className="job-main">
+        <h3><a href={href} target="_blank" rel="noopener">{j.title}</a></h3>
+        <p className="job-meta">{j.company || "Unknown company"}<span className="sep" aria-hidden /> {j.location}</p>
+        <div className="chips-row">
+          {j.date === latest && <span className="tag accent">New</span>}
+          <span className={"tag" + (j.jobType === "Full-time" ? "" : " quiet")}>{j.jobType || "Type not listed"}</span>
+          {MODE[j.mode] && <span className="tag quiet">{MODE[j.mode]}</span>}
+          {j.exp && !(parseInt(j.exp, 10) >= 2) && <span className="tag quiet">{j.exp.replace(/\byrs?\b/, m => m === "yr" ? "year" : "years")}</span>}
+          {warn && <span className="tag caution">{warn}</span>}
+          <FitChip j={j} resumes={resumes} />
         </div>
       </div>
-      <div className="apply-col">
-        {j.direct ? <>
-          <a className="apply-btn" href={j.direct} target="_blank" rel="noopener" title="The company's own posting">Apply ↗</a>
-          {j.direct !== j.url && <a className="via" href={j.url} target="_blank" rel="noopener">via {srcName(j.source)}</a>}
-        </> : <>
-          <a className="apply-btn" href={j.url} target="_blank" rel="noopener">Apply on {srcName(j.source)} ↗</a>
-          <a className="via" target="_blank" rel="noopener" title="Search for this exact role on the company's career site"
-             href={"https://www.google.com/search?q=" + encodeURIComponent(`"${j.title}" "${j.company}" (site:greenhouse.io OR site:lever.co OR site:ashbyhq.com OR site:myworkdayjobs.com OR site:icims.com OR site:smartrecruiters.com OR site:workable.com OR careers)`)}>🔎 Find on company site</a>
-        </>}
+      <div className="job-side">
+        <span className="match" title="How well it fits: skills, entry level, full-time, in person, a direct company link">{j.score} match</span>
       </div>
-      {open.sum && <SummaryPanel j={j} company={company} resumes={resumes} />}
-      {open.prep && prep && <PrepPanel prep={prep} solved={solved} store={store} />}
-      {open.ref && <RefPanel j={j} store={store} sent={outreach} />}
-      {open.kit && <KitPanel j={j} store={store} resumes={resumes} kit={kit} applied={s === "applied"} onApplied={() => set(s === "applied" ? "" : "applied")} />}
-    </div>
+      <div className="job-actions">
+        <a className="pill primary" href={href} target="_blank" rel="noopener"><span className="long">{j.direct ? "Apply on their site" : `Apply on ${srcName(j.source)}`}</span><span className="short">Apply</span></a>
+        <button className={"pill" + (s === "applied" ? " on good" : "")} onClick={() => set(s === "applied" ? "" : "applied")}>{s === "applied" ? `Applied ${status!.t.slice(5)}` : "I applied"}</button>
+        <button className={"pill" + (s === "saved" ? " on" : "")} onClick={() => set(s === "saved" ? "" : "saved")}>{s === "saved" ? "Saved" : "Save"}</button>
+        <button className={"link-btn" + (tab ? " on" : "")} onClick={() => setTab(t => t ? null : "about")} aria-expanded={!!tab}>{tab ? "Hide details" : "Details"}</button>
+      </div>
+      {tab && (
+        <div className="details">
+          <div className="pencil-tabs" role="tablist">
+            {tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}
+          </div>
+          {tab === "about" && <About j={j} company={company} resumes={resumes} sheet={sheet} />}
+          {tab === "prep" && prep && <PrepPanel prep={prep} solved={solved} store={store} />}
+          {tab === "kit" && <KitPanel j={j} store={store} resumes={resumes} kit={kit} applied={s === "applied"} onApplied={() => set(s === "applied" ? "" : "applied")} />}
+          {tab === "ref" && <RefPanel j={j} store={store} sent={outreach} />}
+          <div className="details-foot">
+            <button className="link-btn" onClick={copyRow}>Copy as a sheet row</button>
+            {!j.direct && <a className="link-btn" target="_blank" rel="noopener"
+              href={"https://www.google.com/search?q=" + encodeURIComponent(`"${j.title}" "${j.company}" (site:greenhouse.io OR site:lever.co OR site:ashbyhq.com OR site:myworkdayjobs.com OR careers)`)}>Find it on their site</a>}
+            <button className="link-btn" onClick={() => set(s === "hidden" ? "" : "hidden")}>{s === "hidden" ? "Show it again" : "Hide this job"}</button>
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
 export default memo(JobCard);

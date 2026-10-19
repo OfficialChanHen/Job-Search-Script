@@ -1,62 +1,102 @@
 "use client";
-/* Sprites for the village scene.
- *
- * public/sprites/manifest.json maps an actor id to frames in a sprite sheet:
- *   { "actors": { "hunter:graphs": { "src": "/sprites/hunters/graphs.png", "fw": 16, "fh": 16,
- *       "anims": { "idle": { "frames": [[0,0]], "fps": 2 }, "walk": { "frames": [[0,0],[0,1]], "fps": 8 } },
- *       "left": { "walk": { "frames": [[2,0],[2,1]], "fps": 8 } } } } }
- * Frames are [column, row] in units of fw×fh. "left" holds left-facing versions; without them the
- * right-facing frames are mirrored. Actor ids: hunter:<topic>, mob:<zone 1-9>:<0|1>, boss:<zone 1-9>,
- * bld:<inn|kitchen|forge|market>, npc:you. Anything not in the manifest is drawn as its emoji.     */
+/* Pixel-art sprites for the village (Ninja Adventure pack, CC0). public/sprites/manifest.json is
+   written by tools/build_sprites.py. Frames are [col, row] cells of fw×fh, or [x, y, w, h] pixel
+   rects. Characters have walk_/idle_/attack_ + down|up|left|right; bosses have idle and hurt
+   strips with their own image. Anything missing is drawn as its emoji, so the game always works. */
 
-export interface Anim { frames: [number, number][]; fps: number }
-export interface ActorDef { src: string; fw: number; fh: number; anims: Record<string, Anim>; left?: Record<string, Anim> }
-interface Loaded { def: ActorDef; img: HTMLImageElement }
+type Frame = [number, number] | [number, number, number, number];
+interface Anim { frames: Frame[]; fps: number; src?: string; fw?: number; fh?: number }
+interface ActorDef { src: string; fw: number; fh: number; anims: Record<string, Anim> }
+interface Manifest {
+  ground?: Record<string, { src: string; rects: [number, number, number, number][] }>;
+  actors?: Record<string, ActorDef>;
+  faces?: Record<string, string>;
+}
+export type Dir = "down" | "up" | "left" | "right";
 
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-let actors: Record<string, Loaded> = {};
+let manifest: Manifest = {};
+const images = new Map<string, HTMLImageElement>();
 let loading: Promise<void> | null = null;
 
-/** Load the manifest once. Missing manifest = emoji everywhere. */
+function img(src: string) {
+  let i = images.get(src);
+  if (!i) { i = new Image(); i.decoding = "async"; i.src = src; images.set(src, i); }
+  return i;
+}
+const ready = (i: HTMLImageElement | undefined) => !!i && i.complete && i.naturalWidth > 0;
+
+/** Load the manifest and start decoding every image. Safe to call often. */
 export function loadSprites(): Promise<void> {
   return (loading ??= fetch("/sprites/manifest.json")
-    .then(r => (r.ok ? r.json() : { actors: {} }))
-    .then((m: { actors?: Record<string, ActorDef> }) => {
-      const images = new Map<string, HTMLImageElement>();
-      const out: Record<string, Loaded> = {};
-      Object.entries(m.actors ?? {}).forEach(([id, def]) => {
-        let img = images.get(def.src);
-        if (!img) { img = new Image(); img.src = def.src; images.set(def.src, img); }
-        out[id] = { def, img };
-      });
-      actors = out;
+    .then(r => (r.ok ? r.json() : {}))
+    .then((m: Manifest) => {
+      manifest = m;
+      Object.values(m.actors ?? {}).forEach(a => { img(a.src); Object.values(a.anims).forEach(x => x.src && img(x.src)); });
+      Object.values(m.ground ?? {}).forEach(g => img(g.src));
     })
-    .catch(() => { actors = {}; }));
+    .catch(() => { manifest = {}; }));
 }
-export const hasSprite = (id: string) => !!actors[id]?.img.complete && actors[id].img.naturalWidth > 0;
+export const faceUrl = (id: string) => manifest.faces?.[id];
+export const hasActor = (id: string) => !!manifest.actors?.[id];
 
-/** Draw an actor standing at (x, y) = bottom center, `size` px tall. */
-export function drawActor(ctx: CanvasRenderingContext2D, id: string, emoji: string, anim: string, t: number,
-                          x: number, y: number, size: number, faceLeft = false, alpha = 1) {
+function pick(a: ActorDef, anim: string, dir: Dir): Anim | undefined {
+  return a.anims[`${anim}_${dir}`] ?? a.anims[anim] ?? a.anims[`idle_${dir}`] ?? a.anims.idle ?? Object.values(a.anims)[0];
+}
+/** Native size of an actor's frame, in sprite pixels (before scaling). */
+export function actorSize(id: string, anim = "idle", dir: Dir = "down"): { w: number; h: number } {
+  const a = manifest.actors?.[id];
+  if (!a) return { w: 16, h: 16 };
+  const s = pick(a, anim, dir);
+  const f = s?.frames[0];
+  if (f && f.length === 4) return { w: f[2], h: f[3] };
+  return { w: s?.fw ?? a.fw, h: s?.fh ?? a.fh };
+}
+
+export interface DrawOpts { anim?: string; dir?: Dir; t?: number; scale: number; alpha?: number; flip?: boolean; once?: boolean }
+/** Draw an actor standing at (x, y): bottom center, in canvas pixels. */
+export function drawActor(ctx: CanvasRenderingContext2D, id: string, emoji: string, x: number, y: number, o: DrawOpts) {
+  const a = manifest.actors?.[id], s = a && pick(a, o.anim ?? "idle", o.dir ?? "down");
+  const image = s ? img(s.src ?? a!.src) : undefined;
   ctx.save();
-  ctx.globalAlpha = alpha;
-  const a = actors[id];
-  if (a && a.img.complete && a.img.naturalWidth) {
-    const { def, img } = a;
-    const own = faceLeft ? def.left?.[anim] : undefined;
-    const seq = own ?? def.anims[anim] ?? def.anims.idle ?? Object.values(def.anims)[0];
-    const [c, r] = seq.frames[Math.floor(t * seq.fps) % seq.frames.length];
-    const h = size, w = size * def.fw / def.fh;
+  ctx.globalAlpha = o.alpha ?? 1;
+  if (a && s && ready(image)) {
+    const n = s.frames.length, k = Math.floor((o.t ?? 0) * s.fps);
+    const f = s.frames[o.once ? Math.min(k, n - 1) : k % n];
+    const fw = s.fw ?? a.fw, fh = s.fh ?? a.fh;
+    const [sx, sy, sw, sh] = f.length === 4 ? f : [f[0] * fw, f[1] * fh, fw, fh];
+    const w = sw * o.scale, h = sh * o.scale;
     ctx.imageSmoothingEnabled = false;
     ctx.translate(Math.round(x), Math.round(y));
-    if (faceLeft && !own) ctx.scale(-1, 1);
-    ctx.drawImage(img, c * def.fw, r * def.fh, def.fw, def.fh, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+    if (o.flip) ctx.scale(-1, 1);
+    ctx.drawImage(image!, sx, sy, sw, sh, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
   } else {
+    const size = 15 * o.scale;
     ctx.font = `${size}px ${EMOJI_FONT}`;
     ctx.textAlign = "center"; ctx.textBaseline = "bottom";
     ctx.translate(x, y);
-    if (faceLeft) ctx.scale(-1, 1);
+    if (o.flip) ctx.scale(-1, 1);
     ctx.fillText(emoji, 0, 0);
   }
   ctx.restore();
 }
+/** How many frames an animation has and its rate, for one-shot effects. */
+export function animLength(id: string, anim = "idle"): number {
+  const a = manifest.actors?.[id], s = a?.anims[anim];
+  return s ? s.frames.length / s.fps : 0.4;
+}
+
+/** Tile a ground texture over a rect. Mostly the plain tile, with a seeded sprinkle of variants. */
+export function drawGround(ctx: CanvasRenderingContext2D, kind: string, x0: number, y0: number, w: number, h: number, scale: number, fallback: string, seed = 1) {
+  const g = manifest.ground?.[kind], image = g ? img(g.src) : undefined;
+  if (!g || !ready(image)) { ctx.fillStyle = fallback; ctx.fillRect(x0, y0, w, h); return; }
+  const t = 16 * scale;
+  ctx.imageSmoothingEnabled = false;
+  let r = seed;
+  for (let y = y0; y < y0 + h; y += t) for (let x = x0; x < x0 + w; x += t) {
+    r = (r * 1103515245 + 12345) & 0x7fffffff;
+    const rect = g.rects[(r >> 8) % 7 < 5 ? 0 : 1 + ((r >> 4) % (g.rects.length - 1))];
+    ctx.drawImage(image!, rect[0], rect[1], 16, 16, Math.floor(x), Math.floor(y), Math.ceil(t) + 1, Math.ceil(t) + 1);
+  }
+}
+export const spritesLoaded = () => Object.keys(manifest.actors ?? {}).length > 0;

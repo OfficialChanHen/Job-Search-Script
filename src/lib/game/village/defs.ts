@@ -9,28 +9,28 @@ export type BuildingKey = "inn" | "kitchen" | "forge" | "market";
 
 export interface HunterDef { k: string; ico: string; name: string; tier: 1 | 2 | 3; origin: OriginKey; cls: ClassKey }
 
-// LeetCode topic → hunter
+// LeetCode topic → the adventurer who trains on it (the topic stays in the UI as "Trains on …")
 export const HUNTERS: Record<string, Omit<HunterDef, "k">> = {
-  hashing:        { ico: "🗝️", name: "Hash Knight",     tier: 1, origin: "arrays",    cls: "guardian" },
-  two_pointers:   { ico: "🥢", name: "Twin Pointer",    tier: 1, origin: "arrays",    cls: "striker" },
-  sliding_window: { ico: "🪟", name: "Window Ranger",   tier: 2, origin: "arrays",    cls: "striker" },
-  binary_search:  { ico: "🔍", name: "Binary Seeker",   tier: 2, origin: "arrays",    cls: "swift" },
-  intervals:      { ico: "📏", name: "Interval Archer", tier: 2, origin: "arrays",    cls: "sniper" },
-  matrix:         { ico: "🔲", name: "Grid Walker",     tier: 2, origin: "arrays",    cls: "sniper" },
-  stack:          { ico: "🥞", name: "Stack Golem",     tier: 1, origin: "structs",   cls: "guardian" },
-  linked_list:    { ico: "🔗", name: "Link Chain",      tier: 1, origin: "structs",   cls: "swift" },
-  heap:           { ico: "⛰️", name: "Heap Titan",      tier: 2, origin: "structs",   cls: "guardian" },
-  design:         { ico: "🏗️", name: "Architect",       tier: 3, origin: "structs",   cls: "guardian" },
-  trees:          { ico: "🌳", name: "Tree Warden",     tier: 2, origin: "recursion", cls: "guardian" },
-  graphs:         { ico: "🕸️", name: "Graph Weaver",    tier: 3, origin: "recursion", cls: "striker" },
-  backtracking:   { ico: "🧭", name: "Backtrack Rogue", tier: 3, origin: "recursion", cls: "sniper" },
-  dp:             { ico: "🧩", name: "DP Sage",         tier: 3, origin: "recursion", cls: "striker" },
-  strings:        { ico: "🔤", name: "Trie Scribe",     tier: 1, origin: "text",      cls: "sniper" },
-  parsing:        { ico: "📜", name: "Log Parser",      tier: 2, origin: "text",      cls: "swift" },
-  js:             { ico: "🟨", name: "JS Imp",          tier: 1, origin: "text",      cls: "striker" },
-  sql:            { ico: "🗄️", name: "SQL Oracle",      tier: 1, origin: "data",      cls: "guardian" },
-  pandas:         { ico: "🐼", name: "Panda Monk",      tier: 1, origin: "data",      cls: "swift" },
-  math:           { ico: "➗", name: "Bit Mage",        tier: 1, origin: "data",      cls: "sniper" },
+  hashing:        { ico: "🛡️", name: "Sir Aldric",     tier: 1, origin: "arrays",    cls: "guardian" },
+  two_pointers:   { ico: "⚔️", name: "Kael the Duelist",    tier: 1, origin: "arrays",    cls: "striker" },
+  sliding_window: { ico: "⚔️", name: "Ren the Blade",   tier: 2, origin: "arrays",    cls: "striker" },
+  binary_search:  { ico: "🗡️", name: "Lyra the Scout",   tier: 2, origin: "arrays",    cls: "swift" },
+  intervals:      { ico: "🏹", name: "Finn the Archer", tier: 2, origin: "arrays",    cls: "sniper" },
+  matrix:         { ico: "🏹", name: "Mira the Runecaster",     tier: 2, origin: "arrays",    cls: "sniper" },
+  stack:          { ico: "🛡️", name: "Brann Ironwall",     tier: 1, origin: "structs",   cls: "guardian" },
+  linked_list:    { ico: "🗡️", name: "Wren the Rogue",      tier: 1, origin: "structs",   cls: "swift" },
+  heap:           { ico: "🛡️", name: "Thora Shieldmaiden",      tier: 2, origin: "structs",   cls: "guardian" },
+  design:         { ico: "🛡️", name: "Lord Cedric",       tier: 3, origin: "structs",   cls: "guardian" },
+  trees:          { ico: "🛡️", name: "Brother Oren",     tier: 2, origin: "recursion", cls: "guardian" },
+  graphs:         { ico: "⚔️", name: "Vex the Spellblade",    tier: 3, origin: "recursion", cls: "striker" },
+  backtracking:   { ico: "🏹", name: "Shade", tier: 3, origin: "recursion", cls: "sniper" },
+  dp:             { ico: "⚔️", name: "Master Kenji",         tier: 3, origin: "recursion", cls: "striker" },
+  strings:        { ico: "🏹", name: "Elowen the Enchanter",     tier: 1, origin: "text",      cls: "sniper" },
+  parsing:        { ico: "🗡️", name: "Rook the Ranger",      tier: 2, origin: "text",      cls: "swift" },
+  js:             { ico: "⚔️", name: "Ember the Pyromancer",          tier: 1, origin: "text",      cls: "striker" },
+  sql:            { ico: "🛡️", name: "Maeve the Oracle",      tier: 1, origin: "data",      cls: "guardian" },
+  pandas:         { ico: "🗡️", name: "Bao the Wanderer",      tier: 1, origin: "data",      cls: "swift" },
+  math:           { ico: "🏹", name: "Morrow the Mage",        tier: 1, origin: "data",      cls: "sniper" },
 };
 export const TIER_NAME = ["", "Common", "Rare", "Epic"];
 
@@ -54,9 +54,13 @@ export const TRAITS: Record<TraitKey, TraitDef> = {
   sniper:    { ico: "🎯", name: "Sniper",     at: [2, 4],    fx: [0.60, 1.40],       what: "Sniper crits hit {} harder" },
 };
 
-export const RANK_AT = [1, 3, 8, 16];
-export const RANK_MULT = [0, 1, 1.7, 2.8, 4.5];
-export const RANK_NAME = ["", "I", "II", "III", "IV"];
+/* Ranks never stop: each needs more training (solves + spaced reviews) than the last and
+   multiplies the hunter's stats by 1.6. Reviews come back forever, so a topic keeps growing. */
+export const RANK_AT = Array.from({ length: 40 }, (_, i) => i < 4 ? [1, 3, 8, 16][i] : Math.round(16 + 7 * (i - 3) * (i - 2) / 2 + 6 * (i - 3)));
+export const RANK_MULT = [0, ...Array.from({ length: 40 }, (_, i) => Math.pow(1.6, i))];
+const ROMAN: [number, string][] = [[40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+export const roman = (n: number) => { let s = ""; for (const [v, r] of ROMAN) while (n >= v) { s += r; n -= v; } return s; };
+export const RANK_NAME = ["", ...Array.from({ length: 40 }, (_, i) => roman(i + 1))];
 
 // [label, what it does, what beats it]
 export const QUIRKS: Record<Quirk, [string, string, string]> = {
@@ -71,6 +75,7 @@ export const QUIRKS: Record<Quirk, [string, string, string]> = {
 };
 
 export interface ZoneDef { name: string; mobs: string[]; boss: { ico: string; name: string; quirk: Quirk } }
+export const LAP_NAMES = ["", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 export const ZONES: ZoneDef[] = [
   { name: "Application Fields",    mobs: ["📄", "🤖"], boss: { ico: "📞", name: "Recruiter Gatekeeper", quirk: "slam" } },
   { name: "Ghostwood",             mobs: ["👻", "🕳️"], boss: { ico: "🫥", name: "The Ghoster", quirk: "ghost" } },
@@ -84,10 +89,10 @@ export const ZONES: ZoneDef[] = [
 ];
 
 export const BUILDINGS: Record<BuildingKey, { ico: string; name: string; max: number; base: number; g: number; what: (lv: number) => string }> = {
-  inn:     { ico: "🏨", name: "Inn",     max: 6, base: 40, g: 2.2, what: lv => `${2 + lv} hunters can be on duty` },
-  kitchen: { ico: "🍲", name: "Kitchen", max: 5, base: 30, g: 2.4, what: lv => lv > 1 ? `Food lasts ${Math.round(25 * (lv - 1))}% longer` : "Food lasts the normal time" },
-  forge:   { ico: "⚒️", name: "Forge",   max: 6, base: 35, g: 2.3, what: lv => `Gear can reach level ${5 * lv}` },
-  market:  { ico: "🏪", name: "Market",  max: 8, base: 50, g: 2.0, what: lv => lv > 1 ? `Hunting earns ${Math.round(15 * (lv - 1))}% more gold` : "Hunting earns the base rate" },
+  inn:     { ico: "🏨", name: "Inn",     max: 18, base: 40, g: 2.2, what: lv => `${2 + lv} hunters can be on duty` },
+  kitchen: { ico: "🍲", name: "Kitchen", max: 8, base: 30, g: 2.4, what: lv => lv > 1 ? `Food lasts ${Math.round(25 * (lv - 1))}% longer` : "Food lasts the normal time" },
+  forge:   { ico: "⚒️", name: "Forge",   max: 999, base: 35, g: 1.9, what: lv => `Gear can reach level ${8 * lv}` },
+  market:  { ico: "🏪", name: "Market",  max: 999, base: 50, g: 2.0, what: lv => lv > 1 ? `Hunting earns ${Math.round(15 * (lv - 1))}% more gold` : "Hunting earns the base rate" },
 };
 export const BUILDING_ORDER: BuildingKey[] = ["inn", "kitchen", "forge", "market"];
 

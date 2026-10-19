@@ -15,7 +15,7 @@ import type { Topic } from "@/lib/data/types";
 import type { Progress } from "../progress";
 import { DAY_MS, localDay, weekStart } from "../time";
 import {
-  BUILDINGS, CLASSES, FOOD, HUNTERS, QUIRKS, RAID_BOSSES, RANK_AT, RANK_MULT, TRAITS, ZONES,
+  BUILDINGS, CLASSES, FOOD, HUNTERS, LAP_NAMES, QUIRKS, RAID_BOSSES, RANK_AT, RANK_MULT, RANK_NAME, TRAITS, ZONES,
   type BuildingKey, type ClassKey, type HunterDef, type Quirk, type TraitKey,
 } from "./defs";
 import { simulate, type Boss, type Unit } from "./sim";
@@ -34,6 +34,7 @@ export interface VillageState {
   raids: Record<string, 1>;          // weeks whose chest was claimed
   raidNote: string;
   boss: { tries: number; wins: number };
+  bossReadyAt?: number;              // ms: after a loss the boss can be fought again from here
 }
 
 /** Everything outside the village that the village reads. */
@@ -68,7 +69,12 @@ export const burnRate = (v: VillageState) => 1 / (1 + 0.25 * (v.bld.kitchen - 1)
 export const gearOf = (v: VillageState, k: string) => v.gear[k] || { w: 0, a: 0 };
 export const rowOf = (v: VillageState, k: string) => v.row[k] || (HUNTERS[k].cls === "guardian" ? "front" : "back");
 export const bldCost = (b: BuildingKey, lv: number) => Math.round(BUILDINGS[b].base * Math.pow(BUILDINGS[b].g, lv - 1));
-export const gearCost = (lv: number) => Math.round(10 * Math.pow(1.32, lv));
+/* Gear multiplies (×1.08 a level) and each level costs ×1.12 more. Zone pay grows ×1.45 a zone
+   and zone difficulty ×1.35, so each lap of 9 zones takes about twice the hunting of the last: endless,
+   slowing gently, and paced by food, which only comes from real work. */
+export const GEAR_STEP = 1.08;
+export const gearCost = (lv: number) => Math.round(10 * Math.pow(1.12, lv));
+export const gearCap = (v: VillageState) => 8 * v.bld.forge;
 export const rankOf = (c: number) => RANK_AT.filter(a => c >= a).length;
 
 /** Solves plus reviews in a topic. */
@@ -118,8 +124,8 @@ export function partyUnits(v: VillageState, ctx: Ctx, party: string[] = v.party,
     const m = RANK_MULT[r] * (1 + 0.25 * (h.tier - 1)) * ctx.cmd;
     return {
       k, cls: h.cls as ClassKey, rank: r, row: rowOf(v, k),
-      atk: 22 * c.atk * m * (1 + 0.15 * g.w) * (1 + fx("arrays") + (h.cls === "striker" ? fx("striker") : 0)),
-      hp: 160 * c.hp * m * (1 + 0.15 * g.a) * (1 + fx("structs") + (h.cls === "guardian" ? fx("guardian") : 0)),
+      atk: 22 * c.atk * m * Math.pow(GEAR_STEP, g.w) * (1 + fx("arrays") + (h.cls === "striker" ? fx("striker") : 0)),
+      hp: 160 * c.hp * m * Math.pow(GEAR_STEP, g.a) * (1 + fx("structs") + (h.cls === "guardian" ? fx("guardian") : 0)),
       spd: 0.85 * c.spd * (1 + fx("text") + (h.cls === "swift" ? fx("swift") : 0)),
       crit: Math.min(0.9, 0.1 + c.crit + fx("recursion")),
       cdmg: 1.5 + (h.cls === "sniper" ? fx("sniper") : 0),
@@ -131,15 +137,17 @@ export function partyUnits(v: VillageState, ctx: Ctx, party: string[] = v.party,
 }
 
 /* ── zones ─────────────────────────────────────────────────── */
+/** Zones repeat in laps of 9. Each lap is harder and its boss brings a second trick. */
 export function zoneDef(z: number) {
   const i = (z - 1) % ZONES.length, lap = Math.floor((z - 1) / ZONES.length);
-  const suf = lap ? " " + (["II", "III", "IV", "V"][lap - 1] || "V+") : "";
-  const d = ZONES[i];
-  return { z, name: d.name + suf, mobs: d.mobs, boss: { ...d.boss, name: d.boss.name + suf } };
+  const suf = lap ? " " + (LAP_NAMES[lap] || String(lap + 1)) : "";
+  const d = ZONES[i], extra = ZONES[(i + 3 + lap) % ZONES.length].boss.quirk;
+  const quirks: Quirk[] = lap && extra !== d.boss.quirk ? [d.boss.quirk, extra] : [d.boss.quirk];
+  return { z, lap, name: d.name + suf, mobs: d.mobs, boss: { ico: d.boss.ico, name: d.boss.name + suf, quirks } };
 }
 /** What a zone asks of a party, and what it pays an efficient one per hour. */
 export function zoneNeed(z: number) {
-  const g = Math.pow(1.55, z - 1);
+  const g = Math.pow(1.35, z - 1);
   return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.45, z - 1) };
 }
 export function bossOf(z: number): Boss & { z: number; ico: string; name: string } {
@@ -194,7 +202,7 @@ export function review(v: VillageState, ctx: Ctx): { v: VillageState; news: stri
     if (r > was) {
       if (!was && party.length < beds(v)) party.push(k);
       const h = HUNTERS[k];
-      news.push(was ? `⭐ ${h.ico} ${h.name} reached rank ${["", "I", "II", "III", "IV"][r]}!` : `${h.ico} ${h.name} joined your village!`);
+      news.push(was ? `${h.name} reached rank ${RANK_NAME[r]}.` : `${h.name} joined your village.`);
     }
     seen[k] = r;
   });
@@ -213,7 +221,7 @@ export function swapRow(v: VillageState, k: string): VillageState {
   return { ...v, row: { ...v.row, [k]: rowOf(v, k) === "front" ? "back" : "front" } };
 }
 export function buyGear(v: VillageState, p: Progress, k: string, slot: "w" | "a"): Result {
-  const g = gearOf(v, k), lv = g[slot], cap = 5 * v.bld.forge, cost = gearCost(lv);
+  const g = gearOf(v, k), lv = g[slot], cap = gearCap(v), cost = gearCost(lv);
   if (lv >= cap) return { ok: false, error: `Gear is capped at level ${cap}. Upgrade the ⚒️ Forge to go higher.` };
   if (goldNow(v, p) < cost) return { ok: false, error: `You need ${cost.toLocaleString()} gold for that` };
   return { ok: true, v: { ...v, spent: v.spent + cost, gear: { ...v.gear, [k]: { ...g, [slot]: lv + 1 } } } };
@@ -230,14 +238,15 @@ export function pickZone(v: VillageState, z: number): VillageState {
 }
 
 export interface FightOutcome { v: VillageState; boss: ReturnType<typeof bossOf>; log: import("./sim").FightEvent[]; win: boolean; timeout: boolean; t: number; reward: number }
-/** Fight the frontier boss. Costs 1 hour of food; winning opens the next zone. */
-export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random): FightOutcome | { error: string } {
+export const BOSS_COOLDOWN_MS = 20 * 60_000;
+/** Fight the frontier boss. Free; after a loss it can be tried again in 20 minutes. Winning opens the next zone. */
+export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random, now = Date.now()): FightOutcome | { error: string } {
   const party = partyUnits(v, ctx);
   if (!party.units.length) return { error: "Put at least one hunter on duty first" };
-  if (foodLeft(v, ctx.p) < 1) return { error: "A boss fight costs 1 hour of food. Apply to a job to restock." };
+  if (v.bossReadyAt && now < v.bossReadyAt) return { error: `The boss is resting. Try again in ${Math.ceil((v.bossReadyAt - now) / 60_000)} min.` };
   const z = v.unlocked, boss = rollBoss(bossOf(z), rnd), log: import("./sim").FightEvent[] = [];
   const res = simulate(party.units, boss, rnd, log);
-  let next: VillageState = { ...v, bossFood: v.bossFood + 1, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (res.win ? 1 : 0) } };
+  let next: VillageState = { ...v, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (res.win ? 1 : 0) }, bossReadyAt: res.win ? 0 : now + BOSS_COOLDOWN_MS };
   let reward = 0;
   if (res.win) {
     reward = Math.round(zoneNeed(z + 1).gph * 3);
@@ -249,8 +258,8 @@ export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random): FightOu
 }
 
 /** Apply a fight's result to any copy of the village (used when replaying after a sync conflict). */
-export function applyFight(v: VillageState, z: number, win: boolean, reward: number, party: Party): VillageState {
-  let next: VillageState = { ...v, bossFood: v.bossFood + 1, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (win ? 1 : 0) } };
+export function applyFight(v: VillageState, z: number, win: boolean, reward: number, party: Party, now = Date.now()): VillageState {
+  let next: VillageState = { ...v, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (win ? 1 : 0) }, bossReadyAt: win ? 0 : now + BOSS_COOLDOWN_MS };
   if (win && v.unlocked <= z) {
     next = { ...next, unlocked: z + 1, hunted: next.hunted + reward };
     if (goldPerHour(next, party, z + 1) >= goldPerHour(next, party, v.zone)) next.zone = z + 1;
@@ -297,7 +306,7 @@ export function powerHints(v: VillageState, ctx: Ctx): Hint[] {
     if (r >= RANK_AT.length) return;
     const need = RANK_AT[r] - c, h = HUNTERS[k], label = ctx.topics[k].label;
     out.push({ k, ...gain(partyUnits(v, ctx, v.party, { [k]: RANK_AT[r] })), prob: nextProblem(ctx, k),
-      text: `${need} more ${label} ${need > 1 ? "solves or reviews" : "solve or review"} ranks ${h.name} up to ${["", "I", "II", "III", "IV"][r + 1]}` });
+      text: `${need} more ${label} ${need > 1 ? "solves or reviews" : "solve or review"} ranks ${h.name} up to ${RANK_NAME[r + 1]}` });
   });
   const free = v.party.length < beds(v);
   const weakest = base.units.slice().sort((a, b) => a.atk * a.hp - b.atk * b.hp)[0];
@@ -345,3 +354,4 @@ export function claimRaid(v: VillageState, p: Progress, now: Date = new Date()):
 /** Gold per hour of DataAnnotation: an hour of hunting in your best zone. */
 export const daWage = (v: VillageState) => Math.round(zoneNeed(v.unlocked).gph);
 export const quirkInfo = (q: Quirk) => QUIRKS[q];
+export { RANK_NAME };

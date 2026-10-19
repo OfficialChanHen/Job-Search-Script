@@ -2,7 +2,7 @@
 import type { ClassKey, Quirk } from "./defs";
 
 export interface Unit { k: string; cls: ClassKey; rank: number; row: "front" | "back"; atk: number; hp: number; spd: number; crit: number; cdmg: number }
-export interface Boss { hp: number; atk: number; spd: number; quirk: Quirk }
+export interface Boss { hp: number; atk: number; spd: number; quirks: Quirk[] }
 export type FightEvent =
   | { t: number; a: "hit"; i: number; dmg: number; crit: boolean; miss: boolean; bhp: number; hp: number }
   | { t: number; a: "boss"; i: number; dmg: number; hp: number }
@@ -10,22 +10,23 @@ export type FightEvent =
 
 export function simulate(units: Unit[], boss: Boss, rnd: () => number, log?: FightEvent[]): { win: boolean; t: number; timeout?: boolean } {
   const us = units.map(u => ({ ...u, cur: u.hp, next: rnd() / u.spd * 0.6 }));
-  const q = boss.quirk, limit = q === "enrage" ? 15 : 30, dt = 0.05, spdK = q === "frost" ? 0.7 : 1;
+  const has = (q: Quirk) => boss.quirks.includes(q);
+  const limit = has("enrage") ? 15 : 30, dt = 0.05, spdK = has("frost") ? 0.7 : 1;
   let bhp = boss.hp, bnext = 1 / boss.spd, bn = 0, t = 0;
   const alive = () => us.filter(u => u.cur > 0);
   while (t < limit) {
     t += dt;
-    if (q === "regen") bhp = Math.min(boss.hp, bhp + boss.hp * 0.025 * dt);
+    if (has("regen")) bhp = Math.min(boss.hp, bhp + boss.hp * 0.025 * dt);
     for (let i = 0; i < us.length; i++) {
       const u = us[i];
       if (u.cur <= 0 || t < u.next) continue;
       u.next += 1 / (u.spd * spdK);
-      const miss = q === "ghost" && u.cls !== "swift" && rnd() < 0.3;
+      const miss = has("ghost") && u.cls !== "swift" && rnd() < 0.3;
       const crit = !miss && rnd() < u.crit;
       let dmg = miss ? 0 : u.atk * (crit ? u.cdmg : 1) * (0.9 + 0.2 * rnd());
-      if (q === "armor" && !crit) dmg *= 0.6;
+      if (has("armor") && !crit) dmg *= 0.6;
       bhp -= dmg;
-      if (q === "thorns" && dmg) u.cur -= dmg * 0.2;
+      if (has("thorns") && dmg) u.cur -= dmg * 0.2;
       log?.push({ t, a: "hit", i, dmg: Math.round(dmg), crit, miss, bhp: Math.max(0, bhp), hp: u.cur });
       if (bhp <= 0) return { win: true, t };
     }
@@ -33,7 +34,7 @@ export function simulate(units: Unit[], boss: Boss, rnd: () => number, log?: Fig
       bnext += 1 / boss.spd; bn++;
       const live = alive();
       if (!live.length) return { win: false, t };
-      if (bn % (q === "slam" ? 3 : 5) === 0) {
+      if (bn % (has("slam") ? 3 : 5) === 0) {
         live.forEach(u => { u.cur -= boss.atk * 0.6; });
         log?.push({ t, a: "slam", dmg: Math.round(boss.atk * 0.6), hps: us.map(u => u.cur) });
       } else {

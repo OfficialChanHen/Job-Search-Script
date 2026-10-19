@@ -92,13 +92,13 @@ export function KitPanel({ j, store, resumes, kit, applied, onApplied }: { j: Jo
             <p>Send <b>{shortName(f.best.r.name)}</b>{f.need.length ? ` (covers ${f.best.have.length} of ${f.need.length} skills named)` : ""}.</p>
             {f.best.missing.length > 0 && <p className="src">Not on it: {f.best.missing.join(", ")}. Leave those off unless you&apos;ve used them.</p>}
           </> : <p className="none">Add your resume PDFs in <b>📄 My resumes</b> and this picks the best one for each job.</p>}
-        <h4>Your usual answers <small>(saved to your account)</small></h4>
+        <details className="usual"><summary>Your usual answers, ready to copy</summary>
         <div className="stds">{STD_FIELDS.map(([k, label]) => (
           <label className="std" key={k}><span>{label}</span>
             <input defaultValue={std(k)} onBlur={e => store.set(NS.kitStd, k, e.target.value)} placeholder="—" />
             <button className="mini" title="Copy" onClick={e => copyText((e.currentTarget.previousElementSibling as HTMLInputElement).value)}>📋</button>
           </label>))}
-        </div>
+        </div></details>
       </div>
       <div className="kcol">
         <h4>Short answers</h4>

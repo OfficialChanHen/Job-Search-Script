@@ -1,34 +1,34 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { JobData } from "@/lib/data/types";
 import { loadJobData } from "@/lib/client/data";
 import { confetti, setToastImpl, toast } from "@/lib/client/effects";
+import { loadSheetRows } from "@/lib/client/sheetRows";
 import { getStore, useStoreRev } from "@/lib/client/store";
 import { checkProgress } from "@/lib/game/check";
-import { NS } from "@/lib/game/progress";
-import { newVillage, normalize, review, settle, type VillageState } from "@/lib/game/village/engine";
+import { NS, snapshot } from "@/lib/game/progress";
+import { huntHours, newVillage, normalize, review, settle, type VillageState } from "@/lib/game/village/engine";
 import { gameStats, levelFor, titleFor } from "@/lib/game/xp";
-import { snapshot } from "@/lib/game/progress";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { SYNC_ENABLED } from "@/lib/supabase/env";
 import { supabaseBackend } from "@/lib/sync/supabaseBackend";
 import type { Store } from "@/lib/sync/store";
-import Account from "./Account";
+import GamePanel, { fmtHrs } from "./GamePanel";
 import { GameProvider, useDerived, useGame, type Game } from "./GameContext";
-import Hud from "./Hud";
-import { VillageStrip, VillageWindow } from "./Village";
-import { UiProvider } from "./UiContext";
-import { loadSheetRows } from "@/lib/client/sheetRows";
 import JobBoard from "./JobBoard";
+import { Drawer } from "./Panels";
+import { UiProvider, useUi } from "./UiContext";
+import { useNow } from "./useNow";
+import { VillageWindow } from "./Village";
 
 export default function App() {
   const [data, setData] = useState<JobData | null>(null);
   const [store] = useState(getStore);
   const [err, setErr] = useState("");
-  useEffect(() => {
-    loadJobData().then(setData, e => setErr(String(e.message || e)));
-  }, []);
-  if (err) return <div className="wrap"><div className="empty">Couldn&apos;t load jobs: {err}</div></div>;
-  if (!data) return <div className="wrap"><div className="empty">Loading your job hunt…</div></div>;
+  useEffect(() => { loadJobData().then(setData, e => setErr(String(e.message || e))); }, []);
+  if (err) return <div className="loading">Couldn&apos;t load the jobs: {err}</div>;
+  if (!data) return <div className="loading">Loading your job hunt…</div>;
   return <Loaded data={data} store={store} />;
 }
 
@@ -40,44 +40,84 @@ function Loaded({ data, store }: { data: JobData; store: Store }) {
   useCelebrations(game);
   return (
     <GameProvider value={game}>
-     <UiProvider>
-      <div className="wrap">
-        <header className="hero">
-          <div className="eyebrow">Chan Hen&apos;s job hunt</div>
-          <h1>Entry-level SWE &amp; tech roles</h1>
-          <Summary />
-          <div className="sub">Updated {data.meta.generated}. Latest scrape {data.meta.latest}. US only, ranked by skill match, full-time first, in-person first.</div>
-        </header>
-        <Account />
-        <Hud />
-        <VillageStrip />
-        <JobBoard />
-      </div>
-      <VillageWindow />
-      <Toast />
-      <canvas id="confetti" />
-     </UiProvider>
+      <UiProvider>
+        <Shell />
+        <VillageWindow />
+        <Drawer />
+        <Toast />
+        <canvas id="confetti" aria-hidden />
+      </UiProvider>
     </GameProvider>
   );
 }
 
-function Summary() {
-  const { data, p } = useGame();
-  const open = data.jobs.filter(j => !j.closed && p.status[j.id]?.s !== "hidden" && j.type !== "parttime");
-  const applied = Object.values(p.status).filter(v => v.s === "applied").length;
+function Shell() {
+  const { tab } = useUi();
   return (
-    <div className="summary">
-      <strong className="num">{open.filter(j => j.date === data.meta.latest).length}</strong> new today,{" "}
-      <strong className="num">{open.filter(j => j.jobType === "Full-time").length}</strong> full-time,{" "}
-      <strong className="num">{open.filter(j => j.direct).length}</strong> with a direct company link,{" "}
-      <strong className="num">{applied}</strong> applied
-    </div>
+    <>
+      <TopBar />
+      <div className={"shell tab-" + tab}>
+        <main className="jobs-col"><JobBoard /></main>
+        <aside className="game-col" aria-label="Your village"><GamePanel /></aside>
+      </div>
+      <BottomTabs />
+    </>
   );
 }
 
-/* ── sign-in state → sync ───────────────────────────────────── */
+function TopBar() {
+  const { store } = useGame();
+  const { setDrawer } = useUi();
+  const [user, setUser] = useState<string | null>(null);
+  useEffect(() => {
+    const sb = supabaseBrowser();
+    if (!sb) return;
+    sb.auth.getUser().then(({ data }) => setUser(data.user?.email ?? null));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, s) => setUser(s?.user.email ?? null));
+    const q = new URLSearchParams(location.search);
+    if (q.has("signed-in")) toast("Signed in. Your progress now syncs across your devices.");
+    if (q.has("auth-error")) toast("That sign-in link didn't work. Ask for a new one.", true);
+    if (q.has("signed-in") || q.has("auth-error")) history.replaceState(null, "", location.pathname);
+    return () => sub.subscription.unsubscribe();
+  }, []);
+  const state = user ? store.syncState : "local";
+  const label = !user ? (SYNC_ENABLED ? "Saved on this device" : "Saved in this browser")
+    : state === "idle" ? "Synced" : state === "syncing" ? "Syncing" : state === "offline" ? "Offline, will sync" : "Retrying sync";
+  return (
+    <header className="topbar">
+      <Link className="wordmark" href="/">Job <em>hunt</em></Link>
+      <div className="topbar-side">
+        <span className="sync" title={user ?? undefined}><i className={"sync-dot " + state} aria-hidden />{label}</span>
+        {user
+          ? <button className="pill quiet" onClick={async () => { await supabaseBrowser()?.auth.signOut(); toast("Signed out. This device keeps a copy."); }} title={user}>Sign out</button>
+          : SYNC_ENABLED && <button className="pill" onClick={() => setDrawer("account")}>Sign in</button>}
+        <button className="pill" onClick={() => setDrawer("tools")}>Tools</button>
+      </div>
+    </header>
+  );
+}
+
+/** Phones: Jobs and Village as tabs. The Village tab shows food left, so the game is never far. */
+function BottomTabs() {
+  const { tab, setTab } = useUi();
+  const g = useGame();
+  const now = useNow(30_000);
+  const food = g.village ? huntHours(settle(g.village, g.ctx, now).v, g.p) : 0;
+  const quests = g.stats.quests.filter(([, n, goal]) => n < goal).length;
+  return (
+    <nav className="tabbar" aria-label="Sections">
+      <button className={tab === "jobs" ? "on" : ""} onClick={() => setTab("jobs")} aria-current={tab === "jobs" ? "page" : undefined}>
+        <span>Jobs</span><small>{quests ? `${quests} quests left` : "Quests done"}</small>
+      </button>
+      <button className={tab === "village" ? "on" : ""} onClick={() => setTab("village")} aria-current={tab === "village" ? "page" : undefined}>
+        <span>Village</span><small className={food <= 0 ? "moment-text" : ""}>{food > 0 ? `${fmtHrs(food)} of food` : "Out of food"}</small>
+      </button>
+    </nav>
+  );
+}
+
+/* ── sign-in state → sync, and your sheet's rows ───────────── */
 function useSync(store: Store) {
-  // your sheet's rows (Results, follow-ups, status chips, interview XP): on open and every 20 minutes
   useEffect(() => {
     loadSheetRows(store);
     const t = setInterval(() => loadSheetRows(store), 20 * 60_000);
@@ -119,7 +159,7 @@ function useVillageClock(game: Game) {
         earned = r.gold; starved = r.starved;
         return r.v;
       });
-      if (away > 15 * 60_000 && earned >= 1) setTimeout(() => toast(`🏰 While you were away, your hunters earned ${Math.floor(earned).toLocaleString()} gold.` +
+      if (away > 15 * 60_000 && earned >= 1) setTimeout(() => toast(`While you were away, your hunters earned ${Math.floor(earned).toLocaleString()} gold.` +
         (starved > 0.25 ? " They ran out of food a while ago." : "")), 1200);
     }
     const tick = () => store.mutate<VillageState>(NS.village, "state", v => settle(normalize(v), ref.current.ctx, Date.now()).v);
@@ -147,9 +187,9 @@ function useCelebrations(game: Game) {
     const facts = { zones: stats.zones, raidWins: stats.raidWins, bldMax: stats.bldMax, hunters: stats.hunters };
     const r = checkProgress(store, () => gameStats(snapshot(store), byId, facts), new Date());
     if (first.current) { first.current = false; return; }      // don't celebrate old progress on load
-    if (r.cleared) { toast("🎯 All daily quests cleared! +50 XP"); confetti(160); }
-    r.badges.forEach(([, ico, name], i) => setTimeout(() => { toast(`${ico} Badge unlocked: ${name}! +25 XP`); confetti(120); }, 300 + i * 1200));
-    if (r.levelUp) setTimeout(() => { toast(`⬆ Level ${r.levelUp}! You're now a ${titleFor(levelFor(r.stats.xp))}`); confetti(260); }, r.badges.length ? 1400 : 200);
+    if (r.cleared) { toast("Every quest done for today. That's 50 XP and a day's food."); confetti(160); }
+    r.badges.forEach(([, , name], i) => setTimeout(() => { toast(`New badge: ${name}. 25 XP.`); confetti(120); }, 300 + i * 1200));
+    if (r.levelUp) setTimeout(() => { toast(`Level ${r.levelUp}. You're now ${titleFor(levelFor(r.stats.xp))}.`); confetti(260); }, r.badges.length ? 1400 : 200);
   }, [game]);
 }
 
@@ -160,7 +200,7 @@ function Toast() {
     setToastImpl((msg, err) => {
       setT({ msg, err: !!err, show: true });
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setT(x => ({ ...x, show: false })), 2600);
+      timer.current = setTimeout(() => setT(x => ({ ...x, show: false })), 2800);
     });
   }, []);
   return <div id="toast" className={(t.show ? "show" : "") + (t.err ? " err" : "")} role="status">{t.msg}</div>;

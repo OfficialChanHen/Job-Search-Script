@@ -6,8 +6,9 @@ import { Store } from "@/lib/sync/store";
 import { importLegacy } from "@/lib/sync/importLegacy";
 import { checkProgress } from "./check";
 import { NS, setStatus, snapshot, toggleSolved } from "./progress";
+
 import {
-  bossOf, buyBuilding, buyGear, efficiency, fightBoss, foodLeft, goldNow, goldPerHour, huntHours, newVillage,
+  bossOf, buyBuilding, buyGear, gearCap, applyFight, bldCost, gearCost, efficiency, fightBoss, foodLeft, goldNow, goldPerHour, huntHours, newVillage,
   normalize, partyUnits, raidState, review, settle, topicIndex, trainingOf, winChance, type Ctx, type VillageState,
 } from "./village/engine";
 import { mulberry32 } from "./village/sim";
@@ -50,7 +51,9 @@ describe("parity with the old dashboard", () => {
       .toEqual([expected.applied, expected.direct, expected.onsite, expected.cats, expected.interviews, expected.daHours, expected.triaged]);
   });
 
-  it("gets the same village numbers and the same 3 hours of hunting", () => {
+  // damage and HP changed on purpose (gear multiplies now, for endless progression); food, gold,
+  // training, hunting time and the world boss still match the old page exactly
+  it("gets the same food, gold, training and 3 hours of hunting", () => {
     const { store, v, ctx, stats } = setup();
     checkProgress(store, stats, NOW);
     const c = ctx(), p = partyUnits(v(), c);
@@ -58,9 +61,6 @@ describe("parity with the old dashboard", () => {
     expect(training).toEqual(expected.training);
     expect(foodLeft(v(), c.p)).toBeCloseTo(expected.before.food, 6);
     expect(goldNow(v(), c.p)).toBeCloseTo(expected.before.gold, 6);
-    expect(p.dps).toBeCloseTo(expected.before.dps, 6);
-    expect(p.hp).toBeCloseTo(expected.before.hp, 6);
-    expect(p.power).toBe(expected.before.power);
     expect(efficiency(p, v().zone)).toBeCloseTo(expected.before.eff, 6);
     expect(goldPerHour(v(), p)).toBeCloseTo(expected.before.gph, 6);
     expect(huntHours(v(), c.p)).toBeCloseTo(expected.before.hunt, 6);
@@ -101,7 +101,7 @@ describe("village rules", () => {
     toggleSolved(store, 704, NOW);              // binary search
     const { v: next, news } = review(seeded, ctx());
     expect(next.party).toContain("binary_search");
-    expect(news.join()).toMatch(/Binary Seeker joined/);
+    expect(news.join()).toMatch(/Lyra the Scout joined/);
   });
 
   it("gear and buildings cost gold and respect the caps", () => {
@@ -109,7 +109,7 @@ describe("village rules", () => {
     const c = ctx();
     const rich: VillageState = { ...v(), hunted: 1e6 };
     let s = rich;
-    for (let i = 0; i < 5; i++) { const r = buyGear(s, c.p, "dp", "w"); expect(r.ok).toBe(true); if (r.ok) s = r.v; }
+    for (let i = 0; i < gearCap(rich); i++) { const r = buyGear(s, c.p, "dp", "w"); expect(r.ok).toBe(true); if (r.ok) s = r.v; }
     const capped = buyGear(s, c.p, "dp", "w");
     expect(capped.ok).toBe(false);
     const forge = buyBuilding(s, c.p, "forge");
@@ -125,7 +125,7 @@ describe("village rules", () => {
     if ("error" in a) throw new Error(a.error);
     expect(a.win).toBe(true);
     expect(a.v.unlocked).toBe(2);
-    expect(a.v.bossFood).toBe(strong.bossFood + 1);
+    expect(a.v.bossReadyAt).toBe(0);
     expect(a.log.length).toBeGreaterThan(5);
   });
 
@@ -138,4 +138,58 @@ describe("village rules", () => {
     expect(winChance(geared.units, 4, 200, rnd)).toBeGreaterThan(winChance(p.units, 4, 200, rnd));
     expect(bossOf(3).hp).toBeGreaterThan(bossOf(2).hp);
   });
+});
+
+describe("endless progression", () => {
+  /* A steady player for 300 days: 3 applications, 2 solves and a review a day, clears quests every
+     other day. The village hunts, spends greedily, and fights the next boss when the odds are good.
+     Zones must keep coming at a steady pace: no wall, no runaway. */
+  it("keeps unlocking zones at a steady pace for months", () => {
+    const store = new Store({ versioned: [NS.village], localOnly: [NS.sheet] });
+    const pool = Object.values(topics).flatMap(t => t.problems.map(([n]) => n));
+    let v = normalize({ born: "x", last: 1, bonusFood: 24 });
+    const rnd = mulberry32(42), zoneOn: number[] = [];
+    let solved = 0;
+    for (let day = 0; day < 300; day++) {
+      const now = new Date(2027, 0, 1 + day, 20);
+      for (let a = 0; a < 3; a++) store.set(NS.status, `job-${day}-${a}`, { s: "applied", t: "x" });
+      for (let k = 0; k < 2 && solved < pool.length; k++) toggleSolved(store, pool[solved++], now);
+      Object.keys(snapshot(store, now).rev).slice(0, 1).forEach(n => store.set(NS.rev, n, { s: (store.get<{ s: number }>(NS.rev, n)?.s ?? 0) + 1, due: null }));
+      if (day % 2) store.set(NS.clear, "d" + day, 1);
+      const p = snapshot(store, now), ctx: Ctx = { p, topics, topicOf, cmd: 1.1 };
+      v = { ...review(v, ctx).v };
+      v = settle({ ...v, last: now.getTime() - 24 * 3600e3 }, ctx, now.getTime()).v;
+      // spend: beds while there are hunters waiting, then the forge when gear is capped, then the cheapest gear
+      for (let guard = 0; guard < 400; guard++) {
+        const party = partyUnits(v, ctx);
+        const bench = Object.keys(topics).filter(k => trainingOf(ctx, k) > 0 && !v.party.includes(k));
+        if (bench.length && v.party.length < 2 + v.bld.inn) { v = { ...v, party: [...v.party, bench[0]] }; continue; }
+        const buys: [number, () => ReturnType<typeof buyGear>][] = [];
+        if (bench.length) buys.push([bldCost("inn", v.bld.inn), () => buyBuilding(v, p, "inn")]);
+        party.units.forEach(u => (["w", "a"] as const).forEach(slot => {
+          const lv = (v.gear[u.k] || { w: 0, a: 0 })[slot];
+          buys.push(lv >= gearCap(v) ? [bldCost("forge", v.bld.forge), () => buyBuilding(v, p, "forge")] : [gearCost(lv), () => buyGear(v, p, u.k, slot)]);
+        }));
+        buys.sort((a, b) => a[0] - b[0]);
+        const r = buys.length ? buys[0][1]() : null;
+        if (!r || !r.ok) break;
+        v = r.v;
+      }
+      for (let f = 0; f < 30; f++) {
+        const party = partyUnits(v, ctx);
+        if (winChance(party.units, v.unlocked, 40, rnd) < 0.5) break;
+        const out = fightBoss({ ...v, bossReadyAt: 0 }, ctx, rnd, now.getTime());
+        if ("error" in out) break;
+        v = applyFight(v, v.unlocked, out.win, out.reward, party, now.getTime());
+      }
+      zoneOn.push(v.unlocked);
+    }
+    const gained = (a: number, b: number) => zoneOn[b] - zoneOn[a];
+    if (process.env.SIM_LOG) console.log(zoneOn.filter((_, i) => i % 10 === 9).join(" "), "gold", Math.round(goldNow(v, snapshot(store))), "forge", v.bld.forge, "inn", v.bld.inn, "gear", JSON.stringify(v.gear).slice(0, 200), "party", v.party.length);
+    expect(zoneOn[29]).toBeGreaterThanOrEqual(5);              // a good first month
+    expect(gained(100, 199)).toBeGreaterThanOrEqual(8);        // still climbing months later
+    expect(gained(200, 299)).toBeGreaterThanOrEqual(8);        // and later still: no wall
+    expect(gained(200, 299)).toBeLessThanOrEqual(80);          // but no runaway either
+    expect(gained(200, 299)).toBeLessThan(gained(100, 199));   // it slows gently instead
+  }, 60_000);
 });

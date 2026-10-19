@@ -22,3 +22,6 @@ resumes/
 
 # ── legacy dashboard, built locally for comparison ──
 legacy/index.html
+
+# ── art pack (source, 112 MB): only the sprites the game uses are copied to public/sprites/ ──
+/assets/

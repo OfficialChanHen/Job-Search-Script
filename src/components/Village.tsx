@@ -1,39 +1,31 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { confetti, floatText, toast } from "@/lib/client/effects";
 import { getScene } from "@/lib/client/scene";
-import { loadSprites } from "@/lib/client/sprites";
+import { faceUrl } from "@/lib/client/sprites";
 import { logDA, setDARate } from "@/lib/game/da";
 import { NS } from "@/lib/game/progress";
 import { localDay, weekStart } from "@/lib/game/time";
 import { BUILDINGS, CLASSES, RANK_AT, RANK_NAME, TIER_NAME, TRAITS, HUNTERS, type BuildingKey, type TraitKey } from "@/lib/game/village/defs";
 import {
-  applyFight, beds, bldCost, bossOf, buyBuilding, buyGear, claimRaid, daWage, efficiency, fightBoss, gearCost, gearOf, goldNow,
+  applyFight, beds, gearCap, bldCost, bossOf, buyBuilding, buyGear, claimRaid, daWage, efficiency, fightBoss, gearCost, gearOf, goldNow,
   goldPerHour, hintZone, huntHours, hunterKeys, normalize, partyUnits, pickZone, powerHints, quirkInfo, raidState, rankOf, rowOf,
   settle, swapRow, toggleDuty, trained, trainingOf, traitLv, winChance, zoneDef, type Party, type Result, type VillageState,
 } from "@/lib/game/village/engine";
 import { useGame, type Game } from "./GameContext";
-import { fmtClock, toggleDA, useNow } from "./StickyTop";
+
+/** A pixel portrait from the sprite pack, or the emoji while it loads. */
+export function Face({ id, fallback, size = 38 }: { id: string; fallback: string; size?: number }) {
+  const src = faceUrl(id);
+  // eslint-disable-next-line @next/next/no-img-element
+  return src ? <img className="face" src={src} alt="" width={size} height={size} /> : <span className="face" aria-hidden style={{ fontSize: size * 0.7 }}>{fallback}</span>;
+}
+import { fmtHrs, fmtN, toggleDA, useLiveVillage, useScene } from "./GamePanel";
+import { fmtClock, useNow } from "./useNow";
 import { useUi } from "./UiContext";
 
 const pct = (x: number) => Math.round(x * 100) + "%";
-function fmtN(x: number) {
-  x = Math.floor(x);
-  if (Math.abs(x) < 10000) return x.toLocaleString();
-  if (Math.abs(x) < 1e6) return (x / 1000).toFixed(x < 1e5 ? 1 : 0) + "k";
-  return (x / 1e6).toFixed(1) + "M";
-}
-function fmtHrs(h: number) {
-  const m = Math.max(0, Math.round(h * 60));
-  if (m < 60) return m + "m";
-  if (m < 48 * 60) return Math.floor(m / 60) + "h " + (m % 60) + "m";
-  return Math.round(m / 1440) + " days";
-}
 
-/** The village as of right now (hunting since the last save, not yet written). */
-function useLiveVillage(g: Game, tick: number) {
-  return useMemo(() => g.village ? settle(g.village, g.ctx, tick).v : null, [g.village, g.ctx, tick]);
-}
 /** Write a village change: settle first, then apply. Replayed on top of another device's copy if needed. */
 function mutateVillage(g: Game, fn: (v: VillageState) => VillageState) {
   g.store.mutate<VillageState>(NS.village, "state", cur => fn(settle(normalize(cur), g.ctx, Date.now()).v));
@@ -43,57 +35,6 @@ function act(g: Game, live: VillageState, fn: (v: VillageState) => Result, after
   if (!r.ok) return toast(r.error, true);
   mutateVillage(g, v => { const x = fn(v); return x.ok ? x.v : v; });
   after?.();
-}
-
-/* ═══ the scene: one canvas, shown in the strip or the window ═══ */
-function useScene(g: Game, live: VillageState | null, host: React.RefObject<HTMLDivElement | null>, active: boolean) {
-  useEffect(() => { loadSprites(); }, []);
-  useEffect(() => {
-    if (!active || !host.current) return;
-    getScene().mount(host.current);
-  }, [active, host]);
-  useEffect(() => {
-    if (!live) return;
-    const p = partyUnits(live, g.ctx);
-    getScene().update({
-      units: Object.fromEntries(p.units.map(u => [u.k, u])), fed: huntHours(live, g.p) > 0 && p.units.length > 0,
-      eff: efficiency(p, live.zone), dps: p.dps, zone: zoneDef(live.zone), bld: live.bld, daRunning: !!g.p.daRun.run,
-      anyTrained: hunterKeys(g.data.topics).some(k => trained(g.ctx, k)),
-    });
-  }, [g, live]);
-}
-
-export function VillageStrip() {
-  const g = useGame();
-  const { vil, setVil } = useUi();
-  const now = useNow(1000);
-  const live = useLiveVillage(g, now);
-  const host = useRef<HTMLDivElement>(null);
-  useScene(g, live, host, vil === null);
-  useEffect(() => {      // pause the animation when the strip is scrolled away
-    const el = host.current;
-    if (!el || !("IntersectionObserver" in window)) return;
-    const io = new IntersectionObserver(es => { if (vil === null) getScene().setVisible(es[0].isIntersecting); });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [vil]);
-  if (!live) return null;
-  const p = partyUnits(live, g.ctx), fed = huntHours(live, g.p) > 0, gph = goldPerHour(live, p);
-  return (
-    <section className="vstrip" aria-label="Hunter village">
-      <div className="vscene" ref={host} onClick={() => setVil("")} title="Open your village" />
-      <div className="vbar">
-        <span className="vchip">🪙 <b>{fmtN(goldNow(live, g.p))}</b> gold</span>
-        <span className={"vchip" + (fed ? "" : " low")}>
-          {!p.units.length ? <>🍖 <b>Solve a LeetCode problem</b> to recruit your first hunter</>
-            : fed ? <>🍖 <b>{fmtHrs(huntHours(live, g.p))}</b> of food left</> : <>🍖 <b>Out of food.</b> Apply to a job to wake your hunters</>}
-        </span>
-        {fed && gph > 0 && <span className="vchip opt">📈 <b>{fmtN(gph)}</b> gold an hour</span>}
-        <span className="vchip opt">🗺️ {zoneDef(live.zone).name}</span>
-        <button className="vopen" onClick={() => setVil("")}>🏰 Village</button>
-      </div>
-    </section>
-  );
 }
 
 /* ═══ the village window ═══ */
@@ -134,8 +75,8 @@ export function VillageWindow() {
       <div className="vil-box">
         <div className="vil-top">
           <div className="vil-res">
-            {[["Gold", "🪙 " + fmtN(goldNow(live, g.p)), ""], ["Food left", "🍖 " + (fed ? fmtHrs(huntHours(live, g.p)) : "None"), fed ? "" : "low"],
-              ["Gold an hour", "📈 " + (fed ? fmtN(goldPerHour(live, p)) : "0"), ""], ["Party power", "⚔️ " + fmtN(p.power), ""]].map(([l, v, c]) =>
+            {[["Gold", fmtN(goldNow(live, g.p)), ""], ["Food left", fed ? fmtHrs(huntHours(live, g.p)) : "None", fed ? "" : "low"],
+              ["Gold an hour", fed ? fmtN(goldPerHour(live, p)) : "0", ""], ["Party power", fmtN(p.power), ""]].map(([l, v, c]) =>
               <div key={l}><div className="l">{l}</div><div className={"v " + c}>{v}</div></div>)}
           </div>
           <button className="mini" onClick={() => setVil(null)}>Close</button>
@@ -163,12 +104,12 @@ function HunterCard({ g, live, k, sel, select }: { g: Game; live: VillageState; 
   const h = HUNTERS[k], c = trainingOf(g.ctx, k), r = rankOf(c), duty = live.party.includes(k), label = g.data.topics[k].label;
   if (!c) return (
     <button className={"hcard locked" + (sel === k ? " sel" : "")} onClick={() => select(k)} title={`Solve any ${label} problem to recruit`}>
-      <span className={`tier tier${h.tier}`} /><div className="spr">{h.ico}</div><div className="nm">{h.name}</div><div className="rk">🔒 {label}</div>
+      <span className={`tier tier${h.tier}`} /><Face id={"hunter:" + k} fallback={h.ico} /><div className="nm">{h.name}</div><div className="rk">Trains on {label}</div>
     </button>);
   return (
     <button className={"hcard" + (duty ? " duty" : "") + (sel === k ? " sel" : "")} onClick={() => select(k)} title={`${h.name}, ${CLASSES[h.cls].name}`}>
       <span className={`tier tier${h.tier}`} />{duty && <span className="rowtag">{rowOf(live, k) === "front" ? "FRONT" : "BACK"}</span>}
-      <div className="spr">{h.ico}</div><div className="nm">{h.name}</div><div className="rk">{CLASSES[h.cls].ico} Rank {RANK_NAME[r]}</div>
+      <Face id={"hunter:" + k} fallback={h.ico} /><div className="nm">{h.name}</div><div className="rk">Rank {RANK_NAME[r]}, {label}</div>
       <div className="pips">{[1, 2, 3, 4].map(i => <i key={i} className={i <= r ? "on" : ""} />)}</div>
     </button>);
 }
@@ -201,7 +142,7 @@ function HuntersCard({ g, live, p, sel, select }: { g: Game; live: VillageState;
 function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: string; close: () => void }) {
   const h = HUNTERS[k], C = CLASSES[h.cls], c = trainingOf(g.ctx, k), r = rankOf(c), duty = live.party.includes(k);
   const u = partyUnits(live, g.ctx, duty ? live.party : [...live.party, k]).units.find(x => x.k === k);
-  const gear = gearOf(live, k), cap = 5 * live.bld.forge, gold = goldNow(live, g.p), nextAt = RANK_AT[r];
+  const gear = gearOf(live, k), cap = gearCap(live), gold = goldNow(live, g.p), nextAt = RANK_AT[r];
   const today = localDay();
   const solve = (n: number) => import("@/lib/game/progress").then(m => {
     const on = m.toggleSolved(g.store, n);
@@ -214,13 +155,13 @@ function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: s
       <span>{ico} {name} <b>level {lv}</b><br /><span className="sub2">{what}</span></span>
       {lv >= cap ? <button className="mini" disabled title="Upgrade the Forge">Max for Forge {live.bld.forge}</button>
         : <button className={"mini" + (gold >= gearCost(lv) ? " primary" : "")} onClick={() => act(g, live, v => buyGear(v, g.p, k, slot),
-            () => floatText(slot === "w" ? "⚔️ +15% damage" : "🛡️ +15% HP", "var(--good-mark)"))}>Upgrade for {fmtN(gearCost(lv))} 🪙</button>}
+            () => floatText(slot === "w" ? "+8% damage" : "+8% HP", "var(--good-mark)"))}>Upgrade, {fmtN(gearCost(lv))} gold</button>}
     </>;
   };
   return (
     <div className="vcard">
       <h3>{c ? "Hunter" : "Not recruited yet"} <span><button className="mini" onClick={close}>Close</button></span></h3>
-      <div className="hdet"><div className="spr">{h.ico}</div><div>
+      <div className="hdet"><Face id={"hunter:" + k} fallback={h.ico} size={64} /><div>
         <b style={{ fontSize: 16 }}>{h.name}</b>
         <div className="sub2">{TIER_NAME[h.tier]} {C.ico} {C.name}. {C.note} Traits: {TRAITS[h.origin].ico} {TRAITS[h.origin].name} and {TRAITS[h.cls].ico} {TRAITS[h.cls].name}.</div>
         {c && u ? <>
@@ -237,7 +178,7 @@ function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: s
             <button className="mini" onClick={() => mutateVillage(g, v => swapRow(v, k))} title="The boss attacks the front row first">Stands in the {rowOf(live, k)} row. Swap</button>
           </div>
           <h4>Gear (paid with gold)</h4>
-          <div className="gear">{gearRow("w", "⚔️", "Weapon", "Each level adds 15% damage")}{gearRow("a", "🛡️", "Armor", "Each level adds 15% HP")}</div>
+          <div className="gear">{gearRow("w", "⚔️", "Weapon", "Each level adds 8% damage")}{gearRow("a", "🛡️", "Armor", "Each level adds 8% HP")}</div>
         </> : <div className="lead" style={{ marginTop: 8 }}>Solve any problem below to recruit {h.name}.</div>}
       </div></div>
       <h4>Training: {g.data.topics[k].label} problems. Each solve counts 1, and each spaced review counts 1 more.</h4>
@@ -254,7 +195,7 @@ function HunterDetail({ g, live, k, close }: { g: Game; live: VillageState; k: s
 
 function Grounds({ g, live, p, onFight }: { g: Game; live: VillageState; p: Party; onFight: () => void }) {
   const n = Math.max(live.unlocked + 1, 3), eff = efficiency(p, live.zone), fed = huntHours(live, g.p) > 0;
-  const boss = bossOf(live.unlocked), [ql, qd, qc] = quirkInfo(boss.quirk), wc = winChance(p.units, live.unlocked);
+  const boss = bossOf(live.unlocked), quirks = boss.quirks.map(quirkInfo), wc = winChance(p.units, live.unlocked);
   const note = !p.units.length ? "Nobody is on duty." : eff >= 0.95 ? "Your party clears this zone easily."
     : eff >= 0.6 ? "Your party handles this zone, with some retreats to heal." : "This zone is rough. Hunters keep retreating. Pick an easier zone or train up.";
   return (
@@ -269,13 +210,15 @@ function Grounds({ g, live, p, onFight }: { g: Game; live: VillageState; p: Part
       <div>Hunting efficiency <b>{pct(eff)}</b></div>
       <div className={"meter " + (eff >= 0.6 ? "good" : "red")}><div style={{ width: pct(eff) }} /></div>
       <div className="lead">{note} {p.units.length ? (fed ? <>Earning <b>{fmtN(goldPerHour(live, p))}</b> gold an hour.</> : <b>Hunters are asleep with no food. One application feeds them for 4 hours.</b>) : null}</div>
-      <div className="boss"><div className="spr">{boss.ico}</div><div>
+      <div className="boss"><Face id={`boss:${((live.unlocked - 1) % 9) + 1}${Math.floor((live.unlocked - 1) / 9) % 2 ? ":alt" : ""}`} fallback={boss.ico} size={48} /><div>
         <b>{boss.name}</b>, the zone {live.unlocked} boss
-        <div className="q">{ql}. {qd}</div>
-        <div className="q" style={{ color: "var(--ink-3)" }}>Strong against it: {qc}.</div>
+        {quirks.map(([ql, qd, qc]) => <div key={ql}>
+          <div className="q">{ql}. {qd}</div>
+          <div className="q" style={{ color: "var(--ink-3)" }}>Strong against it: {qc}.</div>
+        </div>)}
       </div></div>
-      <button className="fight-btn" onClick={onFight} disabled={!p.units.length}>⚔️ Fight the boss. Win chance {pct(wc)}</button>
-      <div className="lead" style={{ marginTop: 6 }}>A fight costs 1 hour of food. Winning unlocks the next zone, which pays more.</div>
+      <button className="fight-btn" onClick={onFight} disabled={!p.units.length}>Fight the boss. {pct(wc)} chance to win</button>
+      <div className="lead" style={{ marginTop: 6 }}>Fights are free. After a loss the boss rests for 20 minutes. Winning opens the next zone, which pays more.</div>
     </div>
   );
 }
@@ -317,7 +260,7 @@ function Buildings({ g, live }: { g: Game; live: VillageState }) {
           <div className="d">{B.what(lv)}.{!max && <><br />Next: {B.what(lv + 1)}.</>}</div>
           {max ? <button className="mini" disabled>Max level</button>
             : <button className={"mini" + (gold >= cost ? " primary" : "")} onClick={() => act(g, live, v => buyBuilding(v, g.p, b),
-                () => { toast(`${B.ico} ${B.name} is now level ${lv + 1}. ${B.what(lv + 1)}.`); confetti(90); })}>Upgrade for {fmtN(cost)} 🪙</button>}
+                () => { toast(`${B.name} is now level ${lv + 1}. ${B.what(lv + 1)}.`); confetti(90); })}>Upgrade, {fmtN(cost)} gold</button>}
         </div>;
       })}
     </div></div>
@@ -357,7 +300,7 @@ function DACard({ g, live, now }: { g: Game; live: VillageState; now: number }) 
     const m = Math.round(+min);
     if (!(m > 0 && m <= 720)) return toast("Enter minutes between 1 and 720", true);
     const r = logDA(g.store, live, today, m);
-    floatText(`+${fmtN(r.g)} 🪙`, "var(--warn)"); setMin("");
+    floatText(`+${fmtN(r.g)} gold`, "var(--ochre)"); setMin("");
     toast(`💼 Added ${fmtHrs(m / 60)} of DataAnnotation`);
   };
   return (

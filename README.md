@@ -21,6 +21,22 @@ can feed. Progress syncs between your phone and computer.
 | `sheet-sync/` | The Google Apps Script that adds Applied jobs to your tracker sheet |
 | `legacy/` | The old single-page dashboard, kept for reference while features move over ([README](legacy/README.md)) |
 | `docs/` | The old GitHub Pages address, now a "moved" page with a progress backup button |
+| `public/sprites/` | The game's pixel art, picked from the Ninja Adventure pack by `tools/build_sprites.py` |
+| `tools/` | `build_sprites.py`: copies the sprites the game uses and writes their manifest |
+
+## The game
+
+Your hunters are 20 adventurers, one per LeetCode topic: Sir Aldric trains on hash maps, Vex the Spellblade on
+graphs, and so on. Solving and reviewing problems in a topic recruits and ranks up its hunter. Hunters hunt the
+zones on their own while they have food, and food only comes from real work: applications, solves, reviews,
+outreach, cleared quests and DataAnnotation hours. Gold buys gear and buildings; zone bosses are auto-battles.
+Zones repeat in harder laps without end, and `src/lib/game/game.test.ts` simulates 300 days of a steady player to
+check that progress never stalls or runs away.
+
+The look follows Hourelle's editorial system: warm paper, Lora and Instrument Sans, one green accent, coral only
+for things that need you now. Sprites are from the [Ninja Adventure asset pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
+by Pixel-boy and AAA (CC0). To change a pick, unzip the pack to `assets/ninja-adventure/` (gitignored), edit
+`tools/build_sprites.py`, and run `python3 tools/build_sprites.py`.
 
 ## Run it locally
 
