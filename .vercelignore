@@ -6,3 +6,5 @@ sheet-sync/
 resumes/
 .venv/
 /assets/
+tools/
+*.py
