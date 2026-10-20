@@ -17,7 +17,7 @@ import type { Topic } from "@/lib/data/types";
 import type { Progress } from "../progress";
 import { DAY_MS, localDay, weekStart } from "../time";
 import {
-  BUILDINGS, CLASSES, FOOD, HUNTERS, LAP_NAMES, MAT_KEYS, MAT_RATE, QUIRKS, RAID_BOSSES, RANK_AT, RANK_MULT, RANK_NAME, TRAITS, ZONES,
+  BUILDINGS, CLASSES, FOOD, HUNTERS, LAP_NAMES, MARKET_STEP, MAT_KEYS, MAT_RATE, QUIRKS, RAID_BOSSES, RANK_AT, RANK_MULT, RANK_NAME, TRAITS, ZONES,
   cosmetic, trophyCost, type BuildingKey, type ClassKey, type CosKind, type HunterDef, type Mats, type Quirk, type TraitKey,
 } from "./defs";
 import { simulate, type Boss, type Unit } from "./sim";
@@ -84,9 +84,9 @@ export const burnRate = (v: VillageState) => 1 / (1 + 0.25 * (v.bld.kitchen - 1)
 export const gearOf = (v: VillageState, k: string) => v.gear[k] || { w: 0, a: 0 };
 export const rowOf = (v: VillageState, k: string) => v.row[k] || (HUNTERS[k].cls === "guardian" ? "front" : "back");
 export const bldCost = (b: BuildingKey, lv: number) => Math.round(BUILDINGS[b].base * Math.pow(BUILDINGS[b].g, lv - 1));
-/* Gear multiplies (×1.08 a level) and each level costs ×1.12 more. Zone pay grows ×1.45 a zone
-   and zone difficulty ×1.35, so each lap of 9 zones takes about twice the hunting of the last: endless,
-   slowing gently, and paced by food, which only comes from real work. */
+/* Gear multiplies (×1.08 a level) and each level costs ×1.12 more. Zone difficulty grows ×1.4 a zone
+   but wages only ×1.3, so keeping up costs about a quarter more real work each zone (about 8× more
+   per lap of 9): endless, slowing steadily, and paced by real work. */
 export const GEAR_STEP = 1.08;
 export const gearCost = (lv: number) => Math.round(10 * Math.pow(1.12, lv));
 export const gearCap = (v: VillageState) => 8 * v.bld.forge;
@@ -113,7 +113,7 @@ export const foodLeft = (v: VillageState, p: Progress) => foodEarned(p) + v.bonu
 export const huntHours = (v: VillageState, p: Progress) => Math.max(0, foodLeft(v, p)) / burnRate(v);
 
 /** Gold an hour of wages pays today: it grows with the zones you've opened, so pay keeps up with prices. */
-export const wageNow = (v: VillageState) => Math.round(zoneNeed(v.unlocked).gph * (1 + 0.15 * (v.bld.market - 1)));
+export const wageNow = (v: VillageState) => Math.round(zoneNeed(v.unlocked).gph * (1 + MARKET_STEP * (v.bld.market - 1)));
 /** Remember today's wage (the best seen today), so later raises don't re-pay old work. */
 export function recordWage(v: VillageState, day: string): VillageState {
   const w = wageNow(v);
@@ -213,16 +213,16 @@ export function zoneDef(z: number) {
 }
 /** What a zone asks of a party, and what it pays an efficient one per hour. */
 export function zoneNeed(z: number) {
-  const g = Math.pow(1.35, z - 1);
-  return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.45, z - 1) };
+  const g = Math.pow(1.4, z - 1);
+  return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.3, z - 1) };
 }
 export function bossOf(z: number): Boss & { z: number; name: string } {
   const d = zoneDef(z), n = zoneNeed(z);
-  return { ...d.boss, z, hp: n.dps * 22, atk: n.hp * 0.07, spd: 0.7 };
+  return { ...d.boss, z, hp: n.dps * 26, atk: n.hp * 0.08, spd: 0.7 };
 }
-/** Every boss has a good or bad day, so a fight is never a sure thing. */
+/** Every boss has a good or bad day, but only a little: retrying can't carry a weak party. */
 export const rollBoss = <B extends Boss>(b: B, rnd = Math.random): B =>
-  ({ ...b, hp: b.hp * (0.75 + 0.5 * rnd()), atk: b.atk * (0.85 + 0.3 * rnd()) });
+  ({ ...b, hp: b.hp * (0.88 + 0.24 * rnd()), atk: b.atk * (0.92 + 0.16 * rnd()) });
 
 export function efficiency(party: Party, z: number) {
   if (!party.units.length) return 0;
@@ -336,8 +336,10 @@ export const bossLoot = (z: number): Mats => ({ wood: 10 + 4 * z, stone: 8 + 3 *
 const addMats = (a: Mats, b: Mats): Mats => Object.fromEntries(MAT_KEYS.map(m => [m, a[m] + b[m]])) as Mats;
 
 export interface FightOutcome { v: VillageState; boss: ReturnType<typeof bossOf>; log: import("./sim").FightEvent[]; win: boolean; timeout: boolean; t: number; reward: number }
-export const BOSS_COOLDOWN_MS = 20 * 60_000;
-/** Fight the frontier boss. Free; after a loss it can be tried again in 20 minutes. Winning opens the next zone. */
+export const BOSS_COOLDOWN_MS = 60 * 60_000;
+/** Gold for beating a zone boss the first time: an hour of that zone's wages. */
+export const bossReward = (z: number) => Math.round(zoneNeed(z).gph);
+/** Fight the frontier boss. Free; after a loss it can be tried again in an hour. Winning opens the next zone. */
 export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random, now = Date.now()): FightOutcome | { error: string } {
   const party = partyUnits(v, ctx);
   if (!party.units.length) return { error: "Put at least one hunter on duty first" };
@@ -347,7 +349,7 @@ export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random, now = Da
   let next: VillageState = { ...v, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (res.win ? 1 : 0) }, bossReadyAt: res.win ? 0 : now + BOSS_COOLDOWN_MS };
   let reward = 0;
   if (res.win) {
-    reward = Math.round(zoneNeed(z + 1).gph * 3);
+    reward = bossReward(z);
     next = { ...next, unlocked: z + 1, raidGold: next.raidGold + reward, mats: addMats(next.mats, bossLoot(z)) };
     // move up when it pays better
     if (matsScore(matsPerHour(party, z + 1)) >= matsScore(matsPerHour(party, v.zone))) next.zone = z + 1;

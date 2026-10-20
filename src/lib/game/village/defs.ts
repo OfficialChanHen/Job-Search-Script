@@ -88,11 +88,13 @@ export const ZONES: ZoneDef[] = [
   { name: "Hiring Committee Keep", boss: { name: "Hiring Committee Dragon", quirk: "slam" } },
 ];
 
+/** How much more each Market level makes real work pay. */
+export const MARKET_STEP = 0.1;
 export const BUILDINGS: Record<BuildingKey, { name: string; max: number; base: number; g: number; what: (lv: number) => string }> = {
   inn:     { name: "Inn",     max: 18, base: 40, g: 2.2, what: lv => `${2 + lv} hunters can be on duty` },
   kitchen: { name: "Kitchen", max: 8, base: 30, g: 2.4, what: lv => lv > 1 ? `Food lasts ${Math.round(25 * (lv - 1))}% longer` : "Food lasts the normal time" },
-  forge:   { name: "Forge",   max: 999, base: 35, g: 1.9, what: lv => `Gear can reach level ${8 * lv}` },
-  market:  { name: "Market",  max: 999, base: 50, g: 2.0, what: lv => lv > 1 ? `Real work pays ${Math.round(15 * (lv - 1))}% more gold` : "Real work pays the base rate" },
+  forge:   { name: "Forge",   max: 999, base: 35, g: 2.3, what: lv => `Gear can reach level ${8 * lv}` },
+  market:  { name: "Market",  max: 999, base: 50, g: 2.2, what: lv => lv > 1 ? `Real work pays ${Math.round(100 * MARKET_STEP * (lv - 1))}% more gold` : "Real work pays the base rate" },
 };
 export const BUILDING_ORDER: BuildingKey[] = ["inn", "kitchen", "forge", "market"];
 

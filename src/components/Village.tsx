@@ -11,7 +11,7 @@ import {
   type BuildingKey, type CosDef, type CosKind, type Mats, type TraitKey,
 } from "@/lib/game/village/defs";
 import {
-  applyFight, beds, burnRate, gearCap, bldCost, bossOf, buyBuilding, buyGearMany, claimRaid, daWage, efficiency, fightBoss, fillBeds, foodLeft, gearCost, gearOf,
+  applyFight, beds, bossLoot, burnRate, gearCap, bldCost, bossOf, buyBuilding, buyGearMany, claimRaid, daWage, efficiency, fightBoss, fillBeds, foodLeft, gearCost, gearOf,
   buyCosmetic, canPay, craftTrophy, matsBonus, matsNow, matsPerHour, payFor, setLook, setTheme,
   gearPlan, goldNow, hintZone, huntHours, hunterKeys, normalize, partyUnits, pickZone, powerHints, quirkInfo, raidState, rankOf, rowOf,
   settle, swapRow, toggleDuty, trained, trainingOf, traitLv, unitDps, unitOf, winChance, zoneDef, type Party, type Result, type VillageState,
@@ -20,7 +20,7 @@ import { fightRecap, type RecapRow, type Unit } from "@/lib/game/village/sim";
 import { useGame, type Game } from "./GameContext";
 import { Icon } from "./Icon";
 
-import { fmtHrs, fmtN, toggleDA, useLiveVillage, useScene } from "./GamePanel";
+import { fmtHrs, fmtN, holdFight, releaseFight, toggleDA, useLiveVillage, useScene } from "./GamePanel";
 import { fmtClock, useNow } from "./useNow";
 import { useUi } from "./UiContext";
 
@@ -73,10 +73,12 @@ export function VillageWindow() {
     const out = fightBoss(live, g.ctx);
     if ("error" in out) return toast(out.error, true);
     const party = p, z = live.unlocked;
+    holdFight(live, out.reward, out.win ? bossLoot(z) : { wood: 0, stone: 0, gems: 0 });
     mutateVillage(g, v => applyFight(v, z, out.win, out.reward, party));
     host.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     const rows = fightRecap(p.units, out.log);
     getScene().playFight(p.units, { name: out.boss.name, hp: out.boss.hp, z }, out.log, out, () => {
+      releaseFight();
       setRecap({ win: out.win, timeout: out.timeout, t: out.t, name: out.boss.name, rows });
       if (out.win) { toast(`You beat ${out.boss.name}. ${zoneDef(z + 1).name} is open, and you found ${fmtN(out.reward)} gold.`); confetti(120); }
       else toast(out.timeout ? `Time ran out against ${out.boss.name}. See "Get stronger" for what helps most.` : `${out.boss.name} won this time. See "Get stronger" for what helps most.`);
@@ -311,7 +313,7 @@ function Grounds({ g, live, p, onFight, now, recap }: { g: Game; live: VillageSt
       </div></div>
       <button className="fight-btn" onClick={onFight} disabled={!p.units.length || !!resting}>
         {resting ? `The boss is resting. Back in ${fmtClock(resting)}` : `Fight the boss. ${pct(wc)} chance to win`}</button>
-      <div className="lead" style={{ marginTop: 6 }}>Free to fight. After a loss, the boss rests for 20 minutes. Tap the map to skip a fight.</div>
+      <div className="lead" style={{ marginTop: 6 }}>Free to fight. After a loss, the boss rests for an hour. Tap the map to skip a fight.</div>
       {recap && <FightRecap r={recap} />}
     </div>
   );

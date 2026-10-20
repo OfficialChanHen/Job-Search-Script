@@ -10,7 +10,7 @@ import { dueReviews } from "@/lib/game/reviews";
 import {
   efficiency, goldNow, huntHours, hunterKeys, partyUnits, settle, trained, zoneDef, type VillageState,
 } from "@/lib/game/village/engine";
-import { COSMETICS } from "@/lib/game/village/defs";
+import { COSMETICS, MAT_KEYS, type Mats } from "@/lib/game/village/defs";
 import { BADGES, levelFor, levelStart, titleFor } from "@/lib/game/xp";
 import type { Store } from "@/lib/sync/store";
 import { useGame, type Game } from "./GameContext";
@@ -31,9 +31,21 @@ export const fmtHrs = (h: number) => {
   return Math.round(m / 1440) + " days";
 };
 
+/* A boss fight is decided and saved when it starts (so closing the page can't dodge a loss),
+   but the screen keeps showing the village as it was until the fight finishes playing. */
+let held: { reward: number; loot: Mats; unlocked: number; zone: number; bossReadyAt?: number } | null = null;
+export function holdFight(v: VillageState, reward: number, loot: Mats) {
+  held = { reward, loot, unlocked: v.unlocked, zone: v.zone, bossReadyAt: v.bossReadyAt };
+}
+export const releaseFight = () => { held = null; };
+
 /** The village as of right now: hunting since the last save, not yet written. */
 export function useLiveVillage(g: Game, tick: number): VillageState | null {
-  return useMemo(() => g.village ? settle(g.village, g.ctx, tick).v : null, [g.village, g.ctx, tick]);
+  const live = useMemo(() => g.village ? settle(g.village, g.ctx, tick).v : null, [g.village, g.ctx, tick]);
+  if (!live || !held || !getScene().fighting) return live;
+  const h = held;
+  return { ...live, raidGold: live.raidGold - h.reward, unlocked: Math.min(live.unlocked, h.unlocked), zone: Math.min(live.zone, h.zone),
+           bossReadyAt: h.bossReadyAt, mats: Object.fromEntries(MAT_KEYS.map(m => [m, live.mats[m] - h.loot[m]])) as Mats };
 }
 
 /** Feed the scene and mount its canvas into `host` while `active`. */
