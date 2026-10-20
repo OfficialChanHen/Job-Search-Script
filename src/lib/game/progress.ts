@@ -6,7 +6,7 @@
  * that both devices overwrite.                                            */
 import type { Store } from "@/lib/sync/store";
 import { REVIEW_GAPS, nextGap } from "./reviews";
-import { addDays, localDay } from "./time";
+import { addDays, localDay, parseSheetDate } from "./time";
 
 export const NS = {
   status: "status",       // jobId → StatusEntry
@@ -63,6 +63,13 @@ export interface Progress {
   sheetRows: SheetRow[];
 }
 
+/** Sheet rows dated in these ranges (inclusive) are ignored everywhere: 2026-10-01..19 were filler, not real applications. */
+export const IGNORED_SHEET_DAYS: [string, string][] = [["2026-10-01", "2026-10-19"]];
+export const isIgnoredSheetRow = (r: SheetRow) => {
+  const d = parseSheetDate(r.date);
+  return !!d && IGNORED_SHEET_DAYS.some(([a, b]) => d >= a && d <= b);
+};
+
 const countBy = (days: string[]) => days.reduce<Record<string, number>>((m, d) => { if (d) m[d] = (m[d] || 0) + 1; return m; }, {});
 
 export function snapshot(store: Store, now: Date = new Date()): Progress {
@@ -93,7 +100,7 @@ export function snapshot(store: Store, now: Date = new Date()): Progress {
     lastLevel: (meta("lastLevel") as number) || 1,
     da: store.entries<DASession>(NS.da),
     daRun: store.get<DARun>(NS.daRun, "timer") ?? { run: 0, rate: "" },
-    sheetRows: (store.get<{ rows: SheetRow[] }>(NS.sheet, "rows")?.rows) ?? [],
+    sheetRows: ((store.get<{ rows: SheetRow[] }>(NS.sheet, "rows")?.rows) ?? []).filter(r => !isIgnoredSheetRow(r)),
   };
 }
 

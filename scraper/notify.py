@@ -20,7 +20,7 @@ import json
 import os
 import smtplib
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -45,6 +45,11 @@ def top_new_jobs() -> tuple[list[dict], int, str]:
     return new[:TOP_N], len(new), latest
 
 
+# Sheet rows dated in these ranges (inclusive) are filler, not real applications.
+# Keep in sync with IGNORED_SHEET_DAYS in src/lib/game/progress.ts.
+IGNORED_SHEET_DAYS = [(date(2026, 10, 1), date(2026, 10, 19))]
+
+
 def follow_ups() -> list[dict]:
     url = os.getenv("SHEET_EXEC_URL", "")
     if not url:
@@ -60,7 +65,7 @@ def follow_ups() -> list[dict]:
         if status and "applied" not in status:
             continue
         d = _parse_date(r.get("date", ""))
-        if not d:
+        if not d or any(a <= d <= b for a, b in IGNORED_SHEET_DAYS):
             continue
         age = (today - d).days
         if FOLLOW_UP_DAYS[0] <= age <= FOLLOW_UP_DAYS[1]:
