@@ -49,6 +49,24 @@ export function simulate(units: Unit[], boss: Boss, rnd: () => number, log?: Fig
   return { win: false, t, timeout: true };
 }
 
+export interface RecapRow { k: string; dealt: number; taken: number; hits: number; crits: number; misses: number; down: boolean }
+/** Who did what in a fight, read back from its log. */
+export function fightRecap(units: Unit[], log: FightEvent[]): RecapRow[] {
+  const hp = units.map(u => u.hp);
+  const rows = units.map(u => ({ k: u.k, dealt: 0, taken: 0, hits: 0, crits: 0, misses: 0, down: false }));
+  const hurt = (i: number, now: number) => { rows[i].taken += Math.max(0, Math.max(0, hp[i]) - Math.max(0, now)); hp[i] = now; };
+  for (const e of log) {
+    if (e.a === "hit") {
+      const r = rows[e.i];
+      r.dealt += e.dmg; r.hits++; if (e.crit) r.crits++; if (e.miss) r.misses++;
+      hurt(e.i, e.hp);              // thorns
+    } else if (e.a === "boss") hurt(e.i, e.hp);
+    else e.hps.forEach((h, i) => hurt(i, h));
+  }
+  rows.forEach((r, i) => { r.down = hp[i] <= 0; });
+  return rows;
+}
+
 /** Seeded random numbers, so tests and replays are repeatable. */
 export function mulberry32(seed: number) {
   return () => {

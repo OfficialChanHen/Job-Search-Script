@@ -92,15 +92,59 @@ export const BUILDINGS: Record<BuildingKey, { ico: string; name: string; max: nu
   inn:     { ico: "🏨", name: "Inn",     max: 18, base: 40, g: 2.2, what: lv => `${2 + lv} hunters can be on duty` },
   kitchen: { ico: "🍲", name: "Kitchen", max: 8, base: 30, g: 2.4, what: lv => lv > 1 ? `Food lasts ${Math.round(25 * (lv - 1))}% longer` : "Food lasts the normal time" },
   forge:   { ico: "⚒️", name: "Forge",   max: 999, base: 35, g: 1.9, what: lv => `Gear can reach level ${8 * lv}` },
-  market:  { ico: "🏪", name: "Market",  max: 999, base: 50, g: 2.0, what: lv => lv > 1 ? `Hunting earns ${Math.round(15 * (lv - 1))}% more gold` : "Hunting earns the base rate" },
+  market:  { ico: "🏪", name: "Market",  max: 999, base: 50, g: 2.0, what: lv => lv > 1 ? `Real work pays ${Math.round(15 * (lv - 1))}% more gold` : "Real work pays the base rate" },
 };
 export const BUILDING_ORDER: BuildingKey[] = ["inn", "kitchen", "forge", "market"];
 
 export const RAID_BOSSES: [string, string][] = [["🧊", "The Hiring Freeze"], ["🦑", "The Layoff Kraken"], ["👾", "The Ghost Job Hydra"],
   ["🌪️", "The Recession Storm"], ["🗿", "The Final Round"]];
 
-/** Food each real action gives, in hours of hunting. */
+/** Food each real action gives, in hours of hunting. Each action also pays this many hours of wages in gold. */
 export const FOOD = { app: 4, solve: 2, review: 1, outreach: 2, followUp: 2, questClear: 6, daHour: 1 };
+
+/* ── materials: hunting gathers them, and they only buy cosmetics (never gear or stats) ── */
+export type Mat = "wood" | "stone" | "gems";
+export type Mats = Record<Mat, number>;
+export const MAT_KEYS: Mat[] = ["wood", "stone", "gems"];
+export const MATS: Record<Mat, { ico: string; name: string; sprite: string }> = {
+  wood: { ico: "🪵", name: "Wood", sprite: "res:wood" }, stone: { ico: "🪨", name: "Stone", sprite: "res:stone" }, gems: { ico: "💎", name: "Gems", sprite: "res:gem" },
+};
+/** What an hour of hunting gathers at full efficiency in zone 1. Harder zones gather a little more. */
+export const MAT_RATE: Mats = { wood: 5, stone: 3, gems: 0.4 };
+
+export type CosKind = "deco" | "aura" | "pennant" | "theme";
+export interface CosDef { id: string; kind: CosKind; name: string; ico: string; cost: Partial<Mats>; sprite?: string; color?: string; note?: string }
+export const COS_KINDS: Record<CosKind, string> = { deco: "Decorations", aura: "Auras", pennant: "Pennants", theme: "Map themes" };
+export const COSMETICS: CosDef[] = [
+  // decorations stand in the town on the map
+  { id: "flowers",  kind: "deco", name: "Flower bed",   ico: "🌷", cost: { wood: 8 } },
+  { id: "campfire", kind: "deco", name: "Campfire",     ico: "🔥", cost: { wood: 20 } },
+  { id: "lantern",  kind: "deco", name: "Lantern",      ico: "🏮", cost: { wood: 15, stone: 5 } },
+  { id: "banner",   kind: "deco", name: "Banner",       ico: "🚩", cost: { wood: 25, gems: 1 } },
+  { id: "olive",    kind: "deco", name: "Olive tree",   ico: "🌳", cost: { wood: 30 }, sprite: "prop:oliveTree" },
+  { id: "cherry",   kind: "deco", name: "Cherry tree",  ico: "🌸", cost: { wood: 40, gems: 1 }, sprite: "prop:pinktree" },
+  { id: "well",     kind: "deco", name: "Fountain",     ico: "⛲", cost: { stone: 45 } },
+  { id: "cottage",  kind: "deco", name: "Cottage",      ico: "🏠", cost: { wood: 90, stone: 40 }, sprite: "bld:house1" },
+  { id: "statue",   kind: "deco", name: "Hero statue",  ico: "🗿", cost: { stone: 90, gems: 3 } },
+  { id: "manor",    kind: "deco", name: "Manor",        ico: "🏡", cost: { wood: 200, stone: 140, gems: 6 }, sprite: "bld:house2" },
+  // hunter looks: unlock once, give to any hunter
+  { id: "aura-gold",   kind: "aura", name: "Golden aura",   ico: "✨", cost: { gems: 2 },             color: "#FFD166" },
+  { id: "aura-frost",  kind: "aura", name: "Frost aura",    ico: "❄️", cost: { stone: 20, gems: 2 },  color: "#8FD3FF" },
+  { id: "aura-ember",  kind: "aura", name: "Ember aura",    ico: "🔥", cost: { wood: 30, gems: 2 },   color: "#FF8A5B" },
+  { id: "aura-void",   kind: "aura", name: "Void aura",     ico: "🌌", cost: { stone: 40, gems: 5 },  color: "#B79CFF" },
+  { id: "pen-red",     kind: "pennant", name: "Red pennant",    ico: "🟥", cost: { wood: 12 },            color: "#E0675A" },
+  { id: "pen-blue",    kind: "pennant", name: "Blue pennant",   ico: "🟦", cost: { wood: 12 },            color: "#5B8DEF" },
+  { id: "pen-green",   kind: "pennant", name: "Green pennant",  ico: "🟩", cost: { wood: 12 },            color: "#5FBF7F" },
+  { id: "pen-royal",   kind: "pennant", name: "Royal pennant",  ico: "🟪", cost: { wood: 30, gems: 2 },   color: "#9B6BE0" },
+  // map themes change how the town looks
+  { id: "autumn",  kind: "theme", name: "Autumn",         ico: "🍂", cost: { wood: 60, stone: 20 },           note: "Warm leaves drift over the village" },
+  { id: "blossom", kind: "theme", name: "Cherry blossom", ico: "🌸", cost: { wood: 80, gems: 3 },             note: "Pink trees and falling petals" },
+  { id: "snow",    kind: "theme", name: "Winter",         ico: "❄️", cost: { stone: 80, gems: 2 },            note: "Snow on the ground and snowfall" },
+  { id: "night",   kind: "theme", name: "Night",          ico: "🌙", cost: { wood: 50, stone: 50, gems: 4 },  note: "Moonlight, with lanterns and windows glowing" },
+];
+export const cosmetic = (id: string) => COSMETICS.find(c => c.id === id);
+/** A trophy of a beaten zone boss, for the trophy shelf. Later bosses cost more. */
+export const trophyCost = (z: number): Partial<Mats> => ({ stone: 12 + 6 * (z - 1), gems: 1 + Math.floor((z - 1) / 2) });
 
 /* ── equipment you can see: weapons step up a tier as their level rises, armor shows as a rim ── */
 export const GEAR_TIERS = [0, 5, 15, 30, 60];          // level where each tier starts

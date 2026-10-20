@@ -8,8 +8,9 @@ import { NS } from "@/lib/game/progress";
 import { followUps } from "@/lib/game/followups";
 import { dueReviews } from "@/lib/game/reviews";
 import {
-  efficiency, goldNow, goldPerHour, huntHours, hunterKeys, partyUnits, settle, trained, zoneDef, type VillageState,
+  efficiency, goldNow, huntHours, hunterKeys, partyUnits, settle, trained, zoneDef, type VillageState,
 } from "@/lib/game/village/engine";
+import { COSMETICS } from "@/lib/game/village/defs";
 import { BADGES, levelFor, levelStart, titleFor } from "@/lib/game/xp";
 import type { Store } from "@/lib/sync/store";
 import { useGame, type Game } from "./GameContext";
@@ -37,7 +38,9 @@ export function useLiveVillage(g: Game, tick: number): VillageState | null {
 
 /** Feed the scene and mount its canvas into `host` while `active`. */
 export function useScene(g: Game, live: VillageState | null, host: React.RefObject<HTMLDivElement | null>, active: boolean) {
+  const { setVil } = useUi();
   useEffect(() => { loadSprites(); }, []);
+  useEffect(() => { if (active) getScene().onSelect = k => setVil(k); }, [active, setVil]);   // click a hunter on the map to open their card
   useEffect(() => { if (active && host.current) getScene().mount(host.current); }, [active, host]);
   useEffect(() => {
     if (!live) return;
@@ -47,6 +50,8 @@ export function useScene(g: Game, live: VillageState | null, host: React.RefObje
       eff: efficiency(p, live.zone), dps: p.dps, zone: zoneDef(live.zone), bld: live.bld, daRunning: !!g.p.daRun.run,
       anyTrained: hunterKeys(g.data.topics).some(k => trained(g.ctx, k)),
       gear: live.gear, hitmarkers: g.store.get<boolean>(NS.pref, "hitmarkers") !== false,
+      look: live.look, theme: live.theme,
+      decos: COSMETICS.filter(c => c.kind === "deco" && live.cos[c.id]).map(c => c.id),
     });
   }, [g, live]);
 }
@@ -91,7 +96,7 @@ export default function GamePanel() {
     const p = partyUnits(live, g.ctx), food = huntHours(live, g.p), zone = zoneDef(live.zone).name;
     if (!p.units.length) status = <>Solve a LeetCode problem to recruit your first hunter.</>;
     else if (food <= 0) { hungry = true; status = <>Your hunters are asleep with no food. One application feeds them for 4 hours.</>; }
-    else status = <>{p.units.length} {p.units.length === 1 ? "hunter is" : "hunters are"} out in {zone}, earning <b>{fmtN(goldPerHour(live, p))}</b> gold an hour. Food lasts <b>{fmtHrs(food)}</b>.</>;
+    else status = <>{p.units.length} {p.units.length === 1 ? "hunter is" : "hunters are"} out in {zone}, gathering materials. Food lasts <b>{fmtHrs(food)}</b>.</>;
   }
 
   return (

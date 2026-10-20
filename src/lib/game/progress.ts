@@ -38,7 +38,7 @@ export interface RevEntry { s: number; due: string | null }
 export interface Followed { d: string; how: "done" | "skip" }
 export interface DASession { d: string; m: number; g: number }
 export interface DARun { run: number; rate: string }
-export interface SheetRow { date?: string; company?: string; title?: string; location?: string; status?: string; url?: string }
+export interface SheetRow { date?: string; company?: string; title?: string; location?: string; status?: string; application?: string; url?: string }
 export interface KitJob { why?: string; you?: string }
 export interface ResumeEntry { name: string; skills: string[]; chars: number; added: string }
 

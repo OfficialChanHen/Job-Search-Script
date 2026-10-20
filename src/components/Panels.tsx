@@ -76,15 +76,15 @@ const MY_LINKS: [string, string][] = [
 ];
 function Tools() {
   const { setDrawer } = useUi();
-  const { store, data, p, byId } = useGame();
+  const { store, p, byId } = useGame();
   const url = store.get<string>(NS.pref, "sheetUrl");
   const resumes = store.entries<ResumeEntry>(NS.resume).length;
   const exportCsv = () => {
     const rows = Object.entries(p.status).filter(([, v]) => v.s === "applied" || v.s === "saved").flatMap(([id, v]) => {
       const j = byId.get(id);
       if (!j) return [];
-      const date = v.t ? `${v.t.slice(5, 7)}/${v.t.slice(8, 10)}/${v.t.slice(0, 4)}` : "";
-      return [sheetRow(j, data.preps[j.prep], v.s === "applied" ? "Applied" : "Saved", date)];
+      const date = v.t || "";
+      return [sheetRow(j, v.s === "applied" ? "Applied" : "Saved", date)];
     });
     const csv = [SHEET_COLS, ...rows].map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(",")).join("\n");
     const a = document.createElement("a");
@@ -190,7 +190,7 @@ function Results() {
         <div className="track"><div className="fill" style={{ width: Math.max(r ? 4 : 0, Math.round(r * 100)) + "%" }} /></div>
         <span className="num">{v.decided ? `${v.pos} of ${v.decided}` : `${v.n} waiting`}</span></div>;
     })}</section>);
-  const byChannel = breakdown(rows, r => channelOf(r.url));
+  const byChannel = breakdown(rows, r => channelOf(r.application ?? r.url));
   const best = byChannel.filter(([, v]) => v.decided >= 5).sort((a, b) => b[1].pos / b[1].decided - a[1].pos / a[1].decided)[0];
   return <>
     <p className="sentence"><b>{rate}%</b> of your decided applications led to an interview. That&apos;s {positive} interviews from {rows.length} applications, with {c.pending} still waiting.</p>

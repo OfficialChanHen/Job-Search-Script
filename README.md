@@ -29,15 +29,19 @@ can feed. Progress syncs between your phone and computer.
 Your hunters are 20 adventurers, one per LeetCode topic: Sir Aldric trains on hash maps, Vex the Spellblade on
 graphs, and so on. Solving and reviewing problems in a topic recruits and ranks up its hunter. Hunters hunt the
 zones on their own while they have food, and food only comes from real work: applications, solves, reviews,
-outreach, cleared quests and DataAnnotation hours. Gold buys gear and buildings; zone bosses are auto-battles.
+outreach, cleared quests and DataAnnotation hours. Gold, for gear and buildings, also only comes from real work:
+each action pays wages at that day's rate, and the first win over each zone boss pays a bonus. Hunting never
+earns gold. It gathers wood, stone and gems, which only buy cosmetics in the Workshop (decorations, auras,
+pennants, map themes, boss trophies). Zone bosses are auto-battles.
 On the map you can watch them attack, take hits, chop wood and mine stone, rest at the inn, and swing the
 weapon their gear level has earned (armor shows as a rim under their feet). Hit markers can be turned off in the
 village window.
 Zones repeat in harder laps without end, and `src/lib/game/game.test.ts` simulates 300 days of a steady player to
 check that progress never stalls or runs away.
 
-Writing and layout follow the rules from Hourelle: status as one sentence, text only where it helps you decide,
-one accent colour, coral only for things that need you now. Sprites are from the [Ninja Adventure asset pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
+The look is an adventurers' guild ledger: parchment and ink, forest green and brass, Zilla Slab headings,
+Alegreya Sans text and Pixelify Sans for the game. Writing still follows the rules from Hourelle: status as one
+sentence, text only where it helps you decide, one accent colour, vermilion only for things that need you now. Sprites are from the [Ninja Adventure asset pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
 by Pixel-boy and AAA (CC0). To change a pick, unzip the pack to `assets/ninja-adventure/` (gitignored), edit
 `tools/build_sprites.py`, and run `python3 tools/build_sprites.py`.
 

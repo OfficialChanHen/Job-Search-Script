@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Sans, Lora } from "next/font/google";
+import { Alegreya_Sans, Pixelify_Sans, Zilla_Slab } from "next/font/google";
 import "./globals.css";
 
-// The display serif (headlines, one italic accent word) and the grotesk for everything else, as on Hourelle.
-const lora = Lora({ variable: "--font-lora", subsets: ["latin"], style: ["normal", "italic"] });
-const sans = Instrument_Sans({ variable: "--font-sans", subsets: ["latin"] });
+// The guild's type: a sturdy slab for headings, a warm humanist sans for reading, pixels for the game.
+const slab = Zilla_Slab({ variable: "--font-slab", subsets: ["latin"], weight: ["500", "600", "700"] });
+const sans = Alegreya_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["400", "500", "700"] });
+const pixel = Pixelify_Sans({ variable: "--font-pixel", subsets: ["latin"], weight: ["400", "500", "600"] });
 
 export const metadata: Metadata = {
   title: "Job hunt",
@@ -16,14 +17,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#FAF6EF" },
-    { media: "(prefers-color-scheme: dark)", color: "#171512" },
+    { media: "(prefers-color-scheme: light)", color: "#F2E9D3" },
+    { media: "(prefers-color-scheme: dark)", color: "#16130E" },
   ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${lora.variable} ${sans.variable}`}>
+    <html lang="en" className={`${slab.variable} ${sans.variable} ${pixel.variable}`}>
       <body>{children}</body>
     </html>
   );

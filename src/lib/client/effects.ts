@@ -26,7 +26,7 @@ export function floatText(text: string, color = "var(--good-mark)", dy = 0) {
 export const floatXP = (n: number) => { if (n) floatText((n > 0 ? "+" : "") + n + " XP", n < 0 ? "var(--ink-3)" : undefined); };
 export const floatFood = (h: number) => floatText(`+${h}h 🍖`, "var(--warn)", 22);
 
-const COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7"];
+const COLORS = ["#2F5D3A", "#A9822F", "#D2AC5A", "#B5482A", "#5E9A6E", "#F2E9D3"];
 type Bit = { x: number; y: number; vx: number; vy: number; r: number; vr: number; w: number; h: number; c: string; life: number };
 let bits: Bit[] = [], raf = 0;
 export function confetti(n: number) {

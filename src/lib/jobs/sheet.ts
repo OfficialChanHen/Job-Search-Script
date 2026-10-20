@@ -1,12 +1,21 @@
 /* Your tracker sheet: rows in its column order, and the Apps Script auto-fill. */
 import type { Job, Prep } from "@/lib/data/types";
 
-export const SHEET_COLS = ["Last Update", "Company", "Job", "Location", "Status", "Application", "Job Type", "LeetCode Prep"];
+export const SHEET_COLS = ["Last Update", "Company", "Job", "Location", "Status", "Application"];
 export function sheetToday(d = new Date()) {
-  return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-export function sheetRow(j: Job, prep: Prep | undefined, status: string, date = sheetToday()) {
-  return [date, j.company, j.title, j.location, status, j.direct || j.url, j.jobType || "", prep?.text ?? ""];
+// the Application column says where you applied, in the words your sheet already uses
+const BOARDS: [RegExp, string][] = [
+  [/linkedin\./, "LinkedIn"], [/indeed\./, "Indeed"], [/adzuna\./, "Adzuna"], [/dice\.com/, "Dice"], [/himalayas\./, "Himalayas"],
+  [/handshake/, "Handshake"], [/simplify\.jobs/, "Simplify"], [/ziprecruiter\./, "ZipRecruiter"], [/jobicy\./, "Jobicy"], [/usajobs\./, "USAJobs"],
+];
+export function applicationOf(j: Pick<Job, "url" | "direct">) {
+  const href = (j.direct || j.url || "").toLowerCase();
+  return BOARDS.find(([re]) => re.test(href))?.[1] ?? "Company website";
+}
+export function sheetRow(j: Job, status: string, date = sheetToday()) {
+  return [date, j.company, j.title, j.location, status, applicationOf(j)];
 }
 export const isAppsScriptUrl = (u: string) => /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u);
 
@@ -15,7 +24,7 @@ export async function pushToSheet(url: string, j: Job, prep: Prep | undefined) {
   await fetch(url, {
     method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ date: sheetToday(), company: j.company, title: j.title, location: j.location, status: "Applied",
-                           url: j.direct || j.url, id: j.id, jobType: j.jobType || "", prep: prep?.text ?? "" }),
+                           application: j.id === "__test__" ? "Test" : applicationOf(j), url: j.direct || j.url, id: j.id, jobType: j.jobType || "", prep: prep?.text ?? "" }),
   });
 }
 

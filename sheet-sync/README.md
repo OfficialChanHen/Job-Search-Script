@@ -5,20 +5,18 @@ sheet automatically. This connects the two. You only do it once.
 
 Columns written (matched **by header name**, so order doesn't matter):
 
-| Last Update | Company | Job | Location | Status | Application | Job Type | LeetCode Prep |
-|---|---|---|---|---|---|---|---|
+| Last Update | Company | Job | Location | Status | Application |
+|---|---|---|---|---|---|
 
-**Job Type** (Full-time / Contract / Part-time / Temporary) and **LeetCode Prep**
-(interview focus, then one `• #N Problem` bullet per line) are added to the end
-of your header row automatically the first time a job is synced — or right away
-if you run `formatNewColumns` once (see below). Drag them wherever you like
-afterwards.
+**Application** is where you applied: `Company website` when the posting links
+to the company's own site, otherwise the board (`LinkedIn`, `Indeed`, `Adzuna`,
+`Dice`, `Himalayas`, …). Dates are written as `yyyy-MM-dd`.
 
-**Colors:** each new column gets its own color from Google Sheets' palette —
-one none of your existing columns use — styled like your other headers (pale or
-deeper shade to match), with tinted data cells if your other columns have them.
+Nothing else is added to your sheet. If you add a **URL**, **Job Type** or
+**LeetCode Prep** header yourself, those get filled too. Re-applying to a job
+updates its row (matched by URL if you have that column, else Company + Job).
 Every synced row copies the formatting and dropdowns of the row above it, so
-column colors and your Status chips carry down. LeetCode Prep cells wrap.
+column colors and your Status chips carry down.
 
 **Read access:** the dashboard's 📈 Results and 📬 Follow-ups (and the optional
 morning digest) read your rows back through the same `/exec` URL
@@ -64,15 +62,12 @@ column order (File → Import → Append to current sheet).
 
 ---
 
-## Already set this up before? (update to version 3)
+## Already set this up before? (update to version 4)
 
 1. Paste the new `Code.gs` over the old one and 💾 Save.
-2. **Optional — color the new columns now:** pick `formatNewColumns` in the
-   function dropdown next to ▶ Run, click **Run** (authorize if asked).
-   "Job Type" and "LeetCode Prep" appear at the end of your header row, colored.
-3. **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
+2. **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
    The `/exec` URL stays the same. Opening the URL in a browser should now show
-   `"version":3`.
+   `"version":4`.
 
 ## Notes
 

@@ -3,5 +3,6 @@ import path from "node:path";
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
-  test: { include: ["src/**/*.test.ts"] },
+  // UI tests (*.test.tsx) pick jsdom with a `@vitest-environment jsdom` comment at the top
+  test: { include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
 });

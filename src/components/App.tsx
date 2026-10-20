@@ -3,12 +3,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { JobData } from "@/lib/data/types";
 import { loadJobData } from "@/lib/client/data";
-import { confetti, setToastImpl, toast } from "@/lib/client/effects";
+import { confetti, floatText, setToastImpl, toast } from "@/lib/client/effects";
 import { loadSheetRows } from "@/lib/client/sheetRows";
 import { getStore, useStoreRev } from "@/lib/client/store";
 import { checkProgress } from "@/lib/game/check";
 import { NS, snapshot } from "@/lib/game/progress";
-import { huntHours, newVillage, normalize, review, settle, type VillageState } from "@/lib/game/village/engine";
+import { huntHours, newVillage, normalize, review, settle, workGold, type VillageState } from "@/lib/game/village/engine";
 import { gameStats, levelFor, titleFor } from "@/lib/game/xp";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { SYNC_ENABLED } from "@/lib/supabase/env";
@@ -153,13 +153,14 @@ function useVillageClock(game: Game) {
       store.mutate<VillageState>(NS.village, "state", v => v ? normalize(v) : newVillage(ctx, Date.now()));
     } else {
       const away = Date.now() - normalize(raw).last;
-      let earned = 0, starved = 0;
+      let got = { wood: 0, stone: 0, gems: 0 }, starved = 0;
       store.mutate<VillageState>(NS.village, "state", v => {
         const r = settle(normalize(v), ref.current.ctx, Date.now());
-        earned = r.gold; starved = r.starved;
+        got = r.mats; starved = r.starved;
         return r.v;
       });
-      if (away > 15 * 60_000 && earned >= 1) setTimeout(() => toast(`While you were away, your hunters earned ${Math.floor(earned).toLocaleString()} gold.` +
+      const parts = ([["wood", got.wood], ["stone", got.stone], ["gems", got.gems]] as const).filter(([, n]) => n >= 1).map(([m, n]) => `${Math.floor(n)} ${m}`);
+      if (away > 15 * 60_000 && parts.length) setTimeout(() => toast(`While you were away, your hunters gathered ${parts.join(", ")}.` +
         (starved > 0.25 ? " They ran out of food a while ago." : "")), 1200);
     }
     const tick = () => store.mutate<VillageState>(NS.village, "state", v => settle(normalize(v), ref.current.ctx, Date.now()).v);
@@ -181,7 +182,14 @@ function useVillageClock(game: Game) {
 
 /* ── badges, quest clears, level-ups ────────────────────────── */
 function useCelebrations(game: Game) {
-  const first = useRef(true);
+  const first = useRef(true), paid = useRef<number | null>(null);
+  // real work pays gold: show it the moment it lands
+  useEffect(() => {
+    if (!game.village) return;
+    const g = workGold(game.village, game.p), was = paid.current;
+    paid.current = g;
+    if (was !== null && g - was >= 1) floatText(`+${Math.round(g - was).toLocaleString()} gold`, "var(--ochre)", 44);
+  }, [game]);
   useEffect(() => {
     const { store, byId, stats } = game;
     const facts = { zones: stats.zones, raidWins: stats.raidWins, bldMax: stats.bldMax, hunters: stats.hunters };

@@ -3,10 +3,12 @@
    hunter; more solves and spaced reviews rank it up (I to IV). Hunters on
    duty hunt by themselves, even while the app is closed, but they eat:
    food comes from applications, solves, reviews, outreach, follow-ups,
-   cleared quests and DataAnnotation hours. Hunting and DataAnnotation earn
-   gold for gear and buildings. Each zone ends in a boss fight that plays
-   out on its own. Food is derived from real progress, so un-marking
-   something takes its food back.
+   cleared quests and DataAnnotation hours.
+   Gold (for gear and buildings) only comes from that same real work: each
+   action pays wages at the rate of the day you did it. Hunting never earns
+   gold. It gathers wood, stone and gems, which only buy cosmetics. Food and
+   gold are derived from real progress, so un-marking something takes both
+   back. Each zone ends in a boss fight that plays out on its own.
 
    Every function here is pure: it takes a VillageState and returns a new
    one. The sync store relies on that to replay changes when another device
@@ -15,8 +17,8 @@ import type { Topic } from "@/lib/data/types";
 import type { Progress } from "../progress";
 import { DAY_MS, localDay, weekStart } from "../time";
 import {
-  BUILDINGS, CLASSES, FOOD, HUNTERS, LAP_NAMES, QUIRKS, RAID_BOSSES, RANK_AT, RANK_MULT, RANK_NAME, TRAITS, ZONES,
-  type BuildingKey, type ClassKey, type HunterDef, type Quirk, type TraitKey,
+  BUILDINGS, CLASSES, FOOD, HUNTERS, LAP_NAMES, MAT_KEYS, MAT_RATE, QUIRKS, RAID_BOSSES, RANK_AT, RANK_MULT, RANK_NAME, TRAITS, ZONES,
+  cosmetic, trophyCost, type BuildingKey, type ClassKey, type CosKind, type HunterDef, type Mats, type Quirk, type TraitKey,
 } from "./defs";
 import { simulate, type Boss, type Unit } from "./sim";
 
@@ -24,7 +26,15 @@ export interface VillageState {
   born: string;
   last: number;                      // ms: hunting has been settled up to here
   eaten: number; bossFood: number; bonusFood: number;
-  hunted: number; raidGold: number; spent: number;
+  hunted: number;                    // gold hunting earned before it stopped paying gold (kept, never grows)
+  raidGold: number; spent: number;
+  wageFrom: string;                  // day real work started paying gold ("" = always); earlier work already paid through hunting
+  wage: Record<string, number>;      // day → gold an hour of wages paid that day
+  mats: Mats; matSpent: Mats;        // materials gathered by hunting, and spent on cosmetics
+  cos: Record<string, 1>;            // cosmetics owned
+  look: Record<string, { aura?: string; pennant?: string }>;
+  theme: string;                     // "" = the village as it comes
+  trophies: Record<string, 1>;       // zone number → trophy crafted
   party: string[];
   row: Record<string, "front" | "back">;
   gear: Record<string, { w: number; a: number }>;
@@ -45,15 +55,20 @@ export interface Ctx {
   cmd: number;                       // 1 + 2% per XP level
 }
 
+const noMats = (): Mats => ({ wood: 0, stone: 0, gems: 0 });
 export const emptyVillage = (): VillageState => ({
   born: "", last: 0, eaten: 0, bossFood: 0, bonusFood: 0, hunted: 0, raidGold: 0, spent: 0,
+  wageFrom: "", wage: {}, mats: noMats(), matSpent: noMats(), cos: {}, look: {}, theme: "", trophies: {},
   party: [], row: {}, gear: {}, bld: { inn: 1, kitchen: 1, forge: 1, market: 1 },
   zone: 1, unlocked: 1, seen: {}, raids: {}, raidNote: "", boss: { tries: 0, wins: 0 },
 });
 /** Fill in fields an older save didn't have. */
 export const normalize = (v: Partial<VillageState> | undefined): VillageState => {
   const e = emptyVillage();
-  return { ...e, ...v, bld: { ...e.bld, ...(v?.bld || {}) }, boss: { ...e.boss, ...(v?.boss || {}) } } as VillageState;
+  // a save from before work paid gold: work up to today was already paid through hunting
+  const wageFrom = v?.wageFrom ?? (v?.born ? localDay() : "");
+  return { ...e, ...v, wageFrom, bld: { ...e.bld, ...(v?.bld || {}) }, boss: { ...e.boss, ...(v?.boss || {}) },
+           mats: { ...e.mats, ...(v?.mats || {}) }, matSpent: { ...e.matSpent, ...(v?.matSpent || {}) } } as VillageState;
 };
 
 export const hunterKeys = (topics: Record<string, Topic>) => Object.keys(HUNTERS).filter(k => topics[k]);
@@ -96,8 +111,48 @@ export function foodEarned(p: Progress): number {
 }
 export const foodLeft = (v: VillageState, p: Progress) => foodEarned(p) + v.bonusFood - v.eaten - v.bossFood;
 export const huntHours = (v: VillageState, p: Progress) => Math.max(0, foodLeft(v, p)) / burnRate(v);
+
+/** Gold an hour of wages pays today: it grows with the zones you've opened, so pay keeps up with prices. */
+export const wageNow = (v: VillageState) => Math.round(zoneNeed(v.unlocked).gph * (1 + 0.15 * (v.bld.market - 1)));
+/** Remember today's wage (the best seen today), so later raises don't re-pay old work. */
+export function recordWage(v: VillageState, day: string): VillageState {
+  const w = wageNow(v);
+  return (v.wage[day] ?? 0) >= w ? v : { ...v, wage: { ...v.wage, [day]: w } };
+}
+/** Gold your real work has paid: each action is worth its food hours in wages, at its day's rate. */
+export function workGold(v: VillageState, p: Progress): number {
+  const now = wageNow(v);
+  let g = 0;
+  const pay = (day: string | undefined, hours: number) => {
+    const d = day || "";
+    if (v.wageFrom && d < v.wageFrom) return;
+    g += hours * (v.wage[d] ?? now);
+  };
+  Object.values(p.status).forEach(x => { if (x.s === "applied") pay(x.t, FOOD.app); });
+  Object.values(p.solved).forEach(d => pay(d, FOOD.solve));
+  Object.entries(p.revDays).forEach(([d, n]) => pay(d, FOOD.review * n));
+  Object.values(p.outreach).forEach(d => pay(d, FOOD.outreach));
+  Object.values(p.followed).forEach(f => { if (f.how === "done") pay(f.d, FOOD.followUp); });
+  Object.keys(p.clears).forEach(d => pay(d, FOOD.questClear));
+  return g;
+}
 export const goldNow = (v: VillageState, p: Progress) =>
-  v.hunted + v.raidGold + p.da.reduce((a, [, s]) => a + (s.g || 0), 0) - v.spent;
+  v.hunted + v.raidGold + workGold(v, p) + p.da.reduce((a, [, s]) => a + (s.g || 0), 0) - v.spent;
+/** Gold one of each real action pays today. */
+export const payFor = (v: VillageState) => Object.fromEntries(Object.entries(FOOD).map(([k, h]) => [k, Math.round(h * wageNow(v))])) as Record<keyof typeof FOOD, number>;
+
+/* ── materials (cosmetics only) ────────────────────────────── */
+export const matsNow = (v: VillageState): Mats =>
+  Object.fromEntries(MAT_KEYS.map(m => [m, Math.max(0, v.mats[m] - v.matSpent[m])])) as Mats;
+export const canPay = (v: VillageState, cost: Partial<Mats>) => MAT_KEYS.every(m => matsNow(v)[m] >= (cost[m] ?? 0) - 1e-9);
+const payMats = (v: VillageState, cost: Partial<Mats>): VillageState =>
+  ({ ...v, matSpent: Object.fromEntries(MAT_KEYS.map(m => [m, v.matSpent[m] + (cost[m] ?? 0)])) as Mats });
+/** Materials an hour of hunting gathers: better efficiency and harder zones gather more. */
+export function matsPerHour(party: Party, z: number): Mats {
+  const k = efficiency(party, z) * (1 + 0.1 * (z - 1));
+  return Object.fromEntries(MAT_KEYS.map(m => [m, MAT_RATE[m] * k])) as Mats;
+}
+export const matsScore = (m: Mats) => m.wood + 1.5 * m.stone + 12 * m.gems;
 
 /* ── party math ────────────────────────────────────────────── */
 export const traitLv = (t: TraitKey, n: number) => TRAITS[t].at.filter(a => n >= a).length;
@@ -112,6 +167,17 @@ export function traitCounts(party: string[]) {
 }
 
 export interface Party { units: Unit[]; tc: Partial<Record<TraitKey, number>>; dps: number; hp: number; power: number }
+/** Average damage a second, counting crits. */
+export const unitDps = (u: Unit) => u.atk * u.spd * (1 + u.crit * (u.cdmg - 1));
+
+/** One hunter's stats as they'd stand in the party (joining it if they're resting).
+    `what` asks "what if": other gear levels, or this much training. */
+export function unitOf(v: VillageState, ctx: Ctx, k: string, what: { w?: number; a?: number; train?: number } = {}): Unit | undefined {
+  const g = gearOf(v, k);
+  const v2 = what.w !== undefined || what.a !== undefined ? { ...v, gear: { ...v.gear, [k]: { w: what.w ?? g.w, a: what.a ?? g.a } } } : v;
+  const party = v.party.includes(k) ? v.party : [...v.party, k];
+  return partyUnits(v2, ctx, party, what.train !== undefined ? { [k]: what.train } : {}).units.find(u => u.k === k);
+}
 
 /** Stats of a party. `over` asks "what if this topic had this much training?" */
 export function partyUnits(v: VillageState, ctx: Ctx, party: string[] = v.party, over: Record<string, number> = {}): Party {
@@ -131,7 +197,7 @@ export function partyUnits(v: VillageState, ctx: Ctx, party: string[] = v.party,
       cdmg: 1.5 + (h.cls === "sniper" ? fx("sniper") : 0),
     };
   });
-  const dps = units.reduce((a, u) => a + u.atk * u.spd * (1 + u.crit * (u.cdmg - 1)), 0);
+  const dps = units.reduce((a, u) => a + unitDps(u), 0);
   const hp = units.reduce((a, u) => a + u.hp, 0);
   return { units, tc, dps, hp, power: Math.round(Math.sqrt(dps * hp)) };
 }
@@ -163,20 +229,22 @@ export function efficiency(party: Party, z: number) {
   const n = zoneNeed(z);
   return Math.max(0.05, Math.pow(Math.min(1, party.dps / n.dps), 0.8) * Math.pow(Math.min(1, party.hp / n.hp), 0.5));
 }
-export function goldPerHour(v: VillageState, party: Party, z: number = v.zone) {
-  return zoneNeed(z).gph * efficiency(party, z) * (1 + 0.15 * (v.bld.market - 1) + traitFx("data", party.tc));
-}
+/** Gold-free: the Data trait now makes hunters gather more materials. */
+export const matsBonus = (party: Party) => 1 + traitFx("data", party.tc);
 
 /* ── time passing ──────────────────────────────────────────── */
-export interface Settled { v: VillageState; hrs: number; h: number; gold: number; starved: number }
-/** Hunt from v.last up to now, as long as there's food. */
+export interface Settled { v: VillageState; hrs: number; h: number; mats: Mats; starved: number }
+/** Hunt from v.last up to now, as long as there's food: hunters eat and gather materials. No gold. */
 export function settle(v: VillageState, ctx: Ctx, now: number): Settled {
-  if (!v.last || now <= v.last) return { v: { ...v, last: Math.max(v.last, now) }, hrs: 0, h: 0, gold: 0, starved: 0 };
+  v = recordWage(v, localDay(new Date(now)));
+  if (!v.last || now <= v.last) return { v: { ...v, last: Math.max(v.last, now) }, hrs: 0, h: 0, mats: noMats(), starved: 0 };
   const hrs = (now - v.last) / 3600e3;
-  const rate = goldPerHour(v, partyUnits(v, ctx));
-  if (!rate) return { v: { ...v, last: now }, hrs, h: 0, gold: 0, starved: 0 };
-  const h = Math.max(0, Math.min(hrs, huntHours(v, ctx.p)));
-  return { v: { ...v, last: now, eaten: v.eaten + h * burnRate(v), hunted: v.hunted + h * rate }, hrs, h, gold: h * rate, starved: hrs - h };
+  const party = partyUnits(v, ctx);
+  if (!party.units.length) return { v: { ...v, last: now }, hrs, h: 0, mats: noMats(), starved: 0 };
+  const h = Math.max(0, Math.min(hrs, huntHours(v, ctx.p))), rate = matsPerHour(party, v.zone), bonus = matsBonus(party);
+  const got = Object.fromEntries(MAT_KEYS.map(m => [m, h * rate[m] * bonus])) as Mats;
+  const mats = Object.fromEntries(MAT_KEYS.map(m => [m, v.mats[m] + got[m]])) as Mats;
+  return { v: { ...v, last: now, eaten: v.eaten + h * burnRate(v), mats }, hrs, h, mats: got, starved: hrs - h };
 }
 
 /** First visit: a day of food and your strongest hunters on duty. */
@@ -184,6 +252,7 @@ export function newVillage(ctx: Ctx, now: number): VillageState {
   const v = emptyVillage();
   const earned = foodEarned(ctx.p);
   v.born = localDay(new Date(now)); v.last = now;
+  v.wageFrom = "";        // a new village: all real work pays gold
   v.eaten = Math.max(0, earned - 24);
   v.bonusFood = Math.max(0, 24 - earned);
   const keys = hunterKeys(ctx.topics);
@@ -226,6 +295,31 @@ export function buyGear(v: VillageState, p: Progress, k: string, slot: "w" | "a"
   if (goldNow(v, p) < cost) return { ok: false, error: `You need ${cost.toLocaleString()} gold for that` };
   return { ok: true, v: { ...v, spent: v.spent + cost, gear: { ...v.gear, [k]: { ...g, [slot]: lv + 1 } } } };
 }
+/** How many gear levels you can afford in a row (up to n), and what they cost together. */
+export function gearPlan(v: VillageState, p: Progress, k: string, slot: "w" | "a", n = Infinity) {
+  const cap = gearCap(v), gold = goldNow(v, p);
+  let lv = gearOf(v, k)[slot], cost = 0, count = 0;
+  while (count < n && lv < cap && gold - cost >= gearCost(lv)) { cost += gearCost(lv); lv++; count++; }
+  return { n: count, cost };
+}
+export function buyGearMany(v: VillageState, p: Progress, k: string, slot: "w" | "a", n: number): Result {
+  let cur = v;
+  for (let i = 0; i < n; i++) {
+    const r = buyGear(cur, p, k, slot);
+    if (!r.ok) { if (!i) return r; break; }
+    cur = r.v;
+  }
+  return { ok: true, v: cur };
+}
+/** Fill empty beds with the strongest resting hunters. */
+export function fillBeds(v: VillageState, ctx: Ctx): Result {
+  const free = beds(v) - v.party.length;
+  const bench = hunterKeys(ctx.topics).filter(k => trained(ctx, k) && !v.party.includes(k));
+  if (free <= 0) return { ok: false, error: "Every bed is taken" };
+  if (!bench.length) return { ok: false, error: "Nobody is resting. Solve a problem in a new topic to recruit someone." };
+  const power = (k: string) => { const u = unitOf(v, ctx, k); return u ? unitDps(u) * u.hp : 0; };
+  return { ok: true, v: { ...v, party: [...v.party, ...bench.sort((a, b) => power(b) - power(a)).slice(0, free)] } };
+}
 export function buyBuilding(v: VillageState, p: Progress, b: BuildingKey): Result {
   const lv = v.bld[b];
   if (lv >= BUILDINGS[b].max) return { ok: false, error: "Already at max level" };
@@ -236,6 +330,10 @@ export function buyBuilding(v: VillageState, p: Progress, b: BuildingKey): Resul
 export function pickZone(v: VillageState, z: number): VillageState {
   return z <= v.unlocked ? { ...v, zone: z } : v;
 }
+
+/** What a zone boss drops the first time you beat it, besides its gold bonus. */
+export const bossLoot = (z: number): Mats => ({ wood: 10 + 4 * z, stone: 8 + 3 * z, gems: 2 + Math.floor(z / 2) });
+const addMats = (a: Mats, b: Mats): Mats => Object.fromEntries(MAT_KEYS.map(m => [m, a[m] + b[m]])) as Mats;
 
 export interface FightOutcome { v: VillageState; boss: ReturnType<typeof bossOf>; log: import("./sim").FightEvent[]; win: boolean; timeout: boolean; t: number; reward: number }
 export const BOSS_COOLDOWN_MS = 20 * 60_000;
@@ -250,9 +348,9 @@ export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random, now = Da
   let reward = 0;
   if (res.win) {
     reward = Math.round(zoneNeed(z + 1).gph * 3);
-    next = { ...next, unlocked: z + 1, hunted: next.hunted + reward };
+    next = { ...next, unlocked: z + 1, raidGold: next.raidGold + reward, mats: addMats(next.mats, bossLoot(z)) };
     // move up when it pays better
-    if (goldPerHour(next, party, z + 1) >= goldPerHour(next, party, v.zone)) next.zone = z + 1;
+    if (matsScore(matsPerHour(party, z + 1)) >= matsScore(matsPerHour(party, v.zone))) next.zone = z + 1;
   }
   return { v: next, boss, log, win: res.win, timeout: !!res.timeout, t: res.t, reward };
 }
@@ -261,11 +359,40 @@ export function fightBoss(v: VillageState, ctx: Ctx, rnd = Math.random, now = Da
 export function applyFight(v: VillageState, z: number, win: boolean, reward: number, party: Party, now = Date.now()): VillageState {
   let next: VillageState = { ...v, boss: { tries: v.boss.tries + 1, wins: v.boss.wins + (win ? 1 : 0) }, bossReadyAt: win ? 0 : now + BOSS_COOLDOWN_MS };
   if (win && v.unlocked <= z) {
-    next = { ...next, unlocked: z + 1, hunted: next.hunted + reward };
-    if (goldPerHour(next, party, z + 1) >= goldPerHour(next, party, v.zone)) next.zone = z + 1;
+    next = { ...next, unlocked: z + 1, raidGold: next.raidGold + reward, mats: addMats(next.mats, bossLoot(z)) };
+    if (matsScore(matsPerHour(party, z + 1)) >= matsScore(matsPerHour(party, v.zone))) next.zone = z + 1;
   }
   return next;
 }
+
+/* ── cosmetics: bought with materials, never change stats ── */
+export function buyCosmetic(v: VillageState, id: string): Result {
+  const c = cosmetic(id);
+  if (!c) return { ok: false, error: "Unknown item" };
+  if (v.cos[id]) return { ok: false, error: "You already have that" };
+  if (!canPay(v, c.cost)) return { ok: false, error: `You need ${costText(c.cost)} for that` };
+  const next = { ...payMats(v, c.cost), cos: { ...v.cos, [id]: 1 as const } };
+  return { ok: true, v: c.kind === "theme" ? { ...next, theme: id } : next };
+}
+export function setTheme(v: VillageState, id: string): Result {
+  if (id && (cosmetic(id)?.kind !== "theme" || !v.cos[id])) return { ok: false, error: "Buy that theme first" };
+  return { ok: true, v: { ...v, theme: id } };
+}
+export function setLook(v: VillageState, k: string, slot: Extract<CosKind, "aura" | "pennant">, id: string): Result {
+  if (id && (cosmetic(id)?.kind !== slot || !v.cos[id])) return { ok: false, error: "Buy that look first" };
+  const cur = { ...(v.look[k] || {}) };
+  if (id) cur[slot] = id; else delete cur[slot];
+  return { ok: true, v: { ...v, look: { ...v.look, [k]: cur } } };
+}
+export function craftTrophy(v: VillageState, z: number): Result {
+  if (z >= v.unlocked) return { ok: false, error: "Beat that boss first" };
+  if (v.trophies[z]) return { ok: false, error: "That trophy is already on the shelf" };
+  const cost = trophyCost(z);
+  if (!canPay(v, cost)) return { ok: false, error: `You need ${costText(cost)} for that` };
+  return { ok: true, v: { ...payMats(v, cost), trophies: { ...v.trophies, [z]: 1 } } };
+}
+const MAT_WORD: Record<keyof Mats, string> = { wood: "wood", stone: "stone", gems: "gems" };
+export const costText = (cost: Partial<Mats>) => MAT_KEYS.filter(m => cost[m]).map(m => `${cost[m]} ${MAT_WORD[m]}`).join(" and ");
 
 /* ── win chance (memoized: it's a Monte Carlo estimate) ────── */
 const winMemo = new Map<string, number>();
@@ -296,10 +423,10 @@ export function hintZone(v: VillageState, party: Party) {
   while (z < v.unlocked + 3 && winChance(party.units, z) >= 0.9) z++;
   return z;
 }
-export interface Hint { k: string; text: string; dw: number; dg: number; prob?: ReturnType<typeof nextProblem>; bench?: boolean }
+export interface Hint { k: string; text: string; dw: number; prob?: ReturnType<typeof nextProblem>; bench?: boolean }
 export function powerHints(v: VillageState, ctx: Ctx): Hint[] {
-  const base = partyUnits(v, ctx), z = hintZone(v, base), w0 = winChance(base.units, z), g0 = goldPerHour(v, base);
-  const gain = (p: Party) => ({ dw: winChance(p.units, z) - w0, dg: goldPerHour(v, p) - g0 });
+  const base = partyUnits(v, ctx), z = hintZone(v, base), w0 = winChance(base.units, z);
+  const gain = (p: Party) => ({ dw: winChance(p.units, z) - w0 });
   const out: Hint[] = [];
   v.party.forEach(k => {
     const c = trainingOf(ctx, k), r = rankOf(c);
@@ -321,8 +448,8 @@ export function powerHints(v: VillageState, ctx: Ctx): Hint[] {
         (!free && weakest ? ` (swap out ${HUNTERS[weakest.k].name})` : "") });
   });
   const bench = hunterKeys(ctx.topics).filter(k => trained(ctx, k) && !v.party.includes(k));
-  if (free && bench.length) out.push({ k: bench[0], dw: 1, dg: 1, bench: true, text: `You have an empty bed. Put ${HUNTERS[bench[0]].name} on duty, it's free.` });
-  return out.filter(h => h.dw > 0.004 || h.dg > 0.05).sort((a, b) => (b.dw - a.dw) || (b.dg - a.dg)).slice(0, 4);
+  if (free && bench.length) out.push({ k: bench[0], dw: 1, bench: true, text: `You have an empty bed. Put ${HUNTERS[bench[0]].name} on duty, it's free.` });
+  return out.filter(h => h.dw > 0.004).sort((a, b) => b.dw - a.dw).slice(0, 4);
 }
 
 /* ── weekly world boss: only real work damages it ──────────── */
@@ -351,7 +478,7 @@ export function claimRaid(v: VillageState, p: Progress, now: Date = new Date()):
   return { ok: true, v: { ...v, raids: { ...v.raids, [R.week]: 1 }, raidGold: v.raidGold + gold, bonusFood: v.bonusFood + 8 } };
 }
 
-/** Gold per hour of DataAnnotation: an hour of hunting in your best zone. */
-export const daWage = (v: VillageState) => Math.round(zoneNeed(v.unlocked).gph);
+/** Gold per hour of DataAnnotation: one hour of wages. */
+export const daWage = (v: VillageState) => wageNow(v);
 export const quirkInfo = (q: Quirk) => QUIRKS[q];
 export { RANK_NAME };

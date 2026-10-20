@@ -4,13 +4,13 @@
  * Deploy this as a Web App bound to your application-tracker spreadsheet.
  * The dashboard POSTs one job per "✓ Applied" click; this writes a row into
  * your tracker, matching columns BY HEADER NAME:
- *   Last Update | Company | Job | Location | Status | Application | Job Type | LeetCode Prep
+ *   Last Update | Company | Job | Location | Status | Application
  *
- * - The header row is found automatically (your sheet's headers sit on row 3).
- * - "Job Type" and "LeetCode Prep" are added to the end of the header row the
- *   first time they're needed, styled like your other headers and given their
- *   own column color (one your other columns don't use). Drag them anywhere
- *   afterwards — rows are matched by header text, not position.
+ * - "Application" is where you applied (Company website, LinkedIn, Indeed…).
+ * - The header row is found automatically (the first of the top 10 rows that
+ *   has both "Company" and "Status").
+ * - Optional columns are filled only if your sheet already has them:
+ *   "URL" (or "Link"), "Job Type" and "LeetCode Prep". Nothing is added.
  * - New rows copy the formatting + dropdowns of the row above, so every
  *   column keeps its color and your Status chips keep working.
  * - GET …/exec?rows=1 returns the tracker rows (read-only) so the dashboard
@@ -20,10 +20,9 @@
  *   Extensions → Apps Script → paste this → Deploy → Web app
  *   (Execute as: Me · Who has access: Anyone) → copy the /exec URL
  *   → paste it into the dashboard's ⚙ Sheet sync panel.
- *   Optional: run formatNewColumns() once from the editor to add + color
- *   the two new columns right away.
  *
- * Re-applying the same job updates its existing row instead of duplicating it.
+ * Re-applying the same job updates its existing row instead of duplicating it
+ * (matched by URL when the sheet has a URL column, else by Company + Job).
  */
 
 // If your tracker isn't the first tab, put its exact name here (else leave "").
@@ -36,22 +35,10 @@ var COLUMNS = [
   { key: "title",    headers: ["Job", "Title", "Role"] },
   { key: "location", headers: ["Location"] },
   { key: "status",   headers: ["Status"] },
-  { key: "url",      headers: ["Application", "URL", "Link"] },
-  { key: "jobType",  headers: ["Job Type", "Type"],       create: "Job Type",      width: 110 },
-  { key: "prep",     headers: ["LeetCode Prep", "Prep"],  create: "LeetCode Prep", width: 380, wrap: true },
-];
-
-// Google Sheets' built-in palette: [header ("light 2"), body ("light 3")]
-var PALETTE = [
-  ["#b4a7d6", "#d9d2e9"],  // purple
-  ["#a2c4c9", "#d0e0e3"],  // cyan
-  ["#f9cb9c", "#fce5cd"],  // orange
-  ["#d5a6bd", "#ead1dc"],  // magenta
-  ["#b6d7a8", "#d9ead3"],  // green
-  ["#a4c2f4", "#c9daf8"],  // cornflower
-  ["#ffe599", "#fff2cc"],  // yellow
-  ["#9fc5e8", "#cfe2f3"],  // blue
-  ["#ea9999", "#f4cccc"],  // red
+  { key: "application", headers: ["Application", "Source", "Applied via"] },
+  { key: "url",      headers: ["URL", "Link", "Job Link"] },
+  { key: "jobType",  headers: ["Job Type", "Type"] },
+  { key: "prep",     headers: ["LeetCode Prep", "Prep"] },
 ];
 
 function _sheet() {
@@ -68,25 +55,24 @@ function doPost(e) {
 
     var d = JSON.parse(e.postData.contents);
     d.date = d.date ||
-      Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "MM/dd/yyyy");
+      Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "yyyy-MM-dd");
     d.status = d.status || "Applied";
 
-    var hdr = _headerMap(sheet, false);
+    var hdr = _headerMap(sheet);
     var values = sheet.getDataRange().getValues();
     var width = Math.max(sheet.getLastColumn(), 1);
 
-    // De-dupe: if this Application URL is already logged, update that row.
-    var urlCol = hdr.cols.url;
-    if (d.url && urlCol !== undefined) {
-      for (var i = hdr.row + 1; i < values.length; i++) {
-        if (String(values[i][urlCol]).trim() === String(d.url).trim()) {
-          _set(sheet, i, hdr.cols.date, d.date);
-          _set(sheet, i, hdr.cols.status, d.status);
-          // fill the new columns on rows logged before they existed
-          if (hdr.cols.jobType !== undefined && !values[i][hdr.cols.jobType]) _set(sheet, i, hdr.cols.jobType, d.jobType || "");
-          if (hdr.cols.prep !== undefined && !values[i][hdr.cols.prep]) _set(sheet, i, hdr.cols.prep, d.prep || "");
-          return _json({ ok: true, updated: true });
-        }
+    // De-dupe: if this job is already logged, update that row.
+    var same = function (a, b) { return String(a).trim().toLowerCase() === String(b || "").trim().toLowerCase(); };
+    var urlCol = hdr.cols.url, coCol = hdr.cols.company, tiCol = hdr.cols.title;
+    for (var i = hdr.row + 1; i < values.length; i++) {
+      var hit = (d.url && urlCol !== undefined) ? same(values[i][urlCol], d.url)
+        : (coCol !== undefined && tiCol !== undefined && d.company && same(values[i][coCol], d.company) && same(values[i][tiCol], d.title));
+      if (hit) {
+        _set(sheet, i, hdr.cols.date, d.date);
+        _set(sheet, i, hdr.cols.status, d.status);
+        if (hdr.cols.application !== undefined && !values[i][hdr.cols.application]) _set(sheet, i, hdr.cols.application, d.application || "");
+        return _json({ ok: true, updated: true });
       }
     }
 
@@ -108,11 +94,9 @@ function doPost(e) {
 
 /**
  * Find the header row (first of the top 10 rows containing "Company" and
- * "Status") and map each payload key to its 0-based column. Unless
- * readOnly, missing "create" columns are appended to the header row and
- * styled (see _styleNewColumn).
+ * "Status") and map each payload key to its 0-based column.
  */
-function _headerMap(sheet, readOnly) {
+function _headerMap(sheet) {
   var lastCol = Math.max(sheet.getLastColumn(), 1);
   var top = sheet.getRange(1, 1, Math.min(10, Math.max(sheet.getLastRow(), 1)), lastCol).getValues();
   var hRow = 0;
@@ -128,73 +112,8 @@ function _headerMap(sheet, readOnly) {
       var idx = headers.indexOf(col.headers[a].toLowerCase());
       if (idx !== -1) { cols[col.key] = idx; return; }
     }
-    if (col.create && !readOnly) {
-      // first empty header cell after the last used one
-      var at = headers.length;
-      while (at > 0 && headers[at - 1] === "") at--;
-      sheet.getRange(hRow + 1, at + 1).setValue(col.create);
-      headers[at] = col.create.toLowerCase();
-      cols[col.key] = at;
-      _styleNewColumn(sheet, hRow, at, col);
-    }
   });
   return { row: hRow, cols: cols };
-}
-
-/**
- * Make a brand-new column look like it belongs: header formatting copied
- * from the header to its left, plus a column color your other columns don't
- * use. Matches your style — pale ("light 3") or deeper ("light 2") headers,
- * and tinted data cells only if your other columns have tinted data cells.
- */
-function _styleNewColumn(sheet, hRow, colIdx, col) {
-  var headerCell = sheet.getRange(hRow + 1, colIdx + 1);
-  if (colIdx > 0) {
-    sheet.getRange(hRow + 1, colIdx).copyTo(headerCell, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-  }
-
-  // Colors already in use (headers + first data row), lower-cased hex
-  var used = {};
-  var lastRow = sheet.getLastRow();
-  var hdrBgs = colIdx > 0 ? sheet.getRange(hRow + 1, 1, 1, colIdx).getBackgrounds()[0] : [];
-  var bodyBgs = (colIdx > 0 && lastRow > hRow + 1)
-    ? sheet.getRange(hRow + 2, 1, 1, colIdx).getBackgrounds()[0] : [];
-  hdrBgs.concat(bodyBgs).forEach(function (c) { used[String(c).toLowerCase()] = 1; });
-
-  var isWhite = function (c) { c = String(c).toLowerCase(); return c === "#ffffff" || c === "white" || c === ""; };
-  var coloredHeaders = hdrBgs.filter(function (c) { return !isWhite(c); });
-  var tintedBody = bodyBgs.some(function (c) { return !isWhite(c); });
-  // Pale headers already? then use the pale shade for the header too.
-  var paleHeaders = coloredHeaders.length > 0 && coloredHeaders.every(function (c) { return _brightness(c) > 205; });
-
-  var pick = PALETTE.filter(function (p) { return !used[p[0]] && !used[p[1]]; })[0] || PALETTE[colIdx % PALETTE.length];
-  headerCell.setBackground(paleHeaders ? pick[1] : pick[0]);
-  if (!coloredHeaders.length) headerCell.setBackground(pick[0]).setFontWeight("bold");
-
-  if (lastRow > hRow + 1) {
-    var body = sheet.getRange(hRow + 2, colIdx + 1, lastRow - hRow - 1, 1);
-    if (colIdx > 0) {  // borders / fonts / alignment from the column to the left
-      sheet.getRange(hRow + 2, colIdx, lastRow - hRow - 1, 1)
-        .copyTo(body, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-    }
-    // pale headers → body a shade lighter still, like a header/body pair
-    body.setBackground(tintedBody ? (paleHeaders ? _mixWhite(pick[1], 0.5) : pick[1]) : null);
-    if (col.wrap) body.setWrap(true).setVerticalAlignment("top");
-  }
-  if (col.width) sheet.setColumnWidth(colIdx + 1, col.width);
-}
-
-function _mixWhite(hex, t) {
-  var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex));
-  if (!m) return hex;
-  var mix = function (h) { var v = Math.round(parseInt(h, 16) + (255 - parseInt(h, 16)) * t); return ("0" + v.toString(16)).slice(-2); };
-  return "#" + mix(m[1]) + mix(m[2]) + mix(m[3]);
-}
-
-function _brightness(hex) {
-  var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex));
-  if (!m) return 255;
-  return (parseInt(m[1], 16) * 299 + parseInt(m[2], 16) * 587 + parseInt(m[3], 16) * 114) / 1000;
 }
 
 /** New row inherits the row above's formats + dropdowns (column colors, Status chips). */
@@ -214,26 +133,16 @@ function _set(sheet, rowIdx, colIdx, value) {
   if (colIdx !== undefined) sheet.getRange(rowIdx + 1, colIdx + 1).setValue(value);
 }
 
-/**
- * Run once from the Apps Script editor (select it → ▶ Run) to add and color
- * "Job Type" + "LeetCode Prep" now, instead of waiting for the next sync.
- */
-function formatNewColumns() {
-  var sheet = _sheet();
-  var hdr = _headerMap(sheet, false);
-  Logger.log("Columns: " + JSON.stringify(hdr.cols));
-}
-
 // GET /exec           → health check
 // GET /exec?rows=1    → tracker rows as JSON (read-only; for the dashboard
 //                        results panel and the morning digest)
 function doGet(e) {
   if (!(e && e.parameter && e.parameter.rows)) {
-    return _json({ ok: true, service: "job-hunt-sheet-sync", version: 3 });
+    return _json({ ok: true, service: "job-hunt-sheet-sync", version: 4 });
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = _sheet();
-  var hdr = _headerMap(sheet, true);
+  var hdr = _headerMap(sheet);
   var tz = ss.getSpreadsheetTimeZone();
   var values = sheet.getDataRange().getValues();
   var rows = [];

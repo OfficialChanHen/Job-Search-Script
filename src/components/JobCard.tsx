@@ -92,7 +92,7 @@ function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, lates
         .catch(() => toast("Couldn't add it to the sheet. Check the URL in Tools.", true));
     }
   };
-  const copyRow = () => copySheetRow(sheetRow(j, prep, s === "saved" ? "Saved" : "Applied").map(String))
+  const copyRow = () => copySheetRow(sheetRow(j, s === "saved" ? "Saved" : "Applied").map(String))
     .then(() => toast("Copied. Paste it into a blank row of your sheet."), () => toast("Couldn't copy", true));
   const warn = warning(j), href = j.direct || j.url;
   const tabs: [Tab, string][] = [["about", "About"], ["prep", prep?.coding ? "LeetCode" : "Prep"], ["kit", "Apply kit"], ["ref", outreach ? "Referral ✓" : "Referral"]];
