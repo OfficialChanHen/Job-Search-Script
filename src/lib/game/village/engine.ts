@@ -209,14 +209,14 @@ export function zoneDef(z: number) {
   const suf = lap ? " " + (LAP_NAMES[lap] || String(lap + 1)) : "";
   const d = ZONES[i], extra = ZONES[(i + 3 + lap) % ZONES.length].boss.quirk;
   const quirks: Quirk[] = lap && extra !== d.boss.quirk ? [d.boss.quirk, extra] : [d.boss.quirk];
-  return { z, lap, name: d.name + suf, mobs: d.mobs, boss: { ico: d.boss.ico, name: d.boss.name + suf, quirks } };
+  return { z, lap, name: d.name + suf, boss: { name: d.boss.name + suf, quirks } };
 }
 /** What a zone asks of a party, and what it pays an efficient one per hour. */
 export function zoneNeed(z: number) {
   const g = Math.pow(1.35, z - 1);
   return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.45, z - 1) };
 }
-export function bossOf(z: number): Boss & { z: number; ico: string; name: string } {
+export function bossOf(z: number): Boss & { z: number; name: string } {
   const d = zoneDef(z), n = zoneNeed(z);
   return { ...d.boss, z, hp: n.dps * 22, atk: n.hp * 0.07, spd: 0.7 };
 }
@@ -283,7 +283,7 @@ export type Result = { ok: true; v: VillageState } | { ok: false; error: string 
 
 export function toggleDuty(v: VillageState, k: string): Result {
   if (v.party.includes(k)) return { ok: true, v: { ...v, party: v.party.filter(x => x !== k) } };
-  if (v.party.length >= beds(v)) return { ok: false, error: `All ${beds(v)} beds are taken. Upgrade the 🏨 Inn or bench someone first.` };
+  if (v.party.length >= beds(v)) return { ok: false, error: `All ${beds(v)} beds are taken. Upgrade the Inn or bench someone first.` };
   return { ok: true, v: { ...v, party: [...v.party, k] } };
 }
 export function swapRow(v: VillageState, k: string): VillageState {
@@ -291,7 +291,7 @@ export function swapRow(v: VillageState, k: string): VillageState {
 }
 export function buyGear(v: VillageState, p: Progress, k: string, slot: "w" | "a"): Result {
   const g = gearOf(v, k), lv = g[slot], cap = gearCap(v), cost = gearCost(lv);
-  if (lv >= cap) return { ok: false, error: `Gear is capped at level ${cap}. Upgrade the ⚒️ Forge to go higher.` };
+  if (lv >= cap) return { ok: false, error: `Gear is capped at level ${cap}. Upgrade the Forge to go higher.` };
   if (goldNow(v, p) < cost) return { ok: false, error: `You need ${cost.toLocaleString()} gold for that` };
   return { ok: true, v: { ...v, spent: v.spent + cost, gear: { ...v.gear, [k]: { ...g, [slot]: lv + 1 } } } };
 }
@@ -444,7 +444,7 @@ export function powerHints(v: VillageState, ctx: Ctx): Hint[] {
     const newTrait = ([h.origin, h.cls] as TraitKey[]).find(t => traitLv(t, p.tc[t] || 0) > traitLv(t, base.tc[t] || 0));
     out.push({ k, ...gain(p), prob: nextProblem(ctx, k),
       text: `Solve one ${ctx.topics[k].label} problem to recruit ${h.name}` +
-        (newTrait ? `. That turns on ${TRAITS[newTrait].ico} ${TRAITS[newTrait].name}` : "") +
+        (newTrait ? `. That turns on ${TRAITS[newTrait].name}` : "") +
         (!free && weakest ? ` (swap out ${HUNTERS[weakest.k].name})` : "") });
   });
   const bench = hunterKeys(ctx.topics).filter(k => trained(ctx, k) && !v.party.includes(k));

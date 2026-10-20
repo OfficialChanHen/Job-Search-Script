@@ -100,7 +100,7 @@ function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, lates
     <article className={"job" + (s ? " " + s : "") + (j.closed ? " closed" : "")}>
       <div className="job-main">
         <h3><a href={href} target="_blank" rel="noopener">{j.title}</a></h3>
-        <p className="job-meta">{j.company || "Unknown company"}<span className="sep" aria-hidden /> {j.location}</p>
+        <p className="job-meta">{j.company || "Unknown company"}{j.location && ", " + j.location}</p>
         <div className="chips-row">
           {j.date === latest && <span className="tag accent">New</span>}
           <span className={"tag" + (j.jobType === "Full-time" ? "" : " quiet")}>{j.jobType || "Type not listed"}</span>

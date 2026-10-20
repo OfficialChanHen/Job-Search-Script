@@ -15,6 +15,7 @@ import { SYNC_ENABLED } from "@/lib/supabase/env";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { importLegacy, parseBackup } from "@/lib/sync/importLegacy";
 import { useGame } from "./GameContext";
+import { Icon } from "./Icon";
 import { useNow } from "./useNow";
 import { useUi, type Drawer as DrawerKind } from "./UiContext";
 
@@ -165,9 +166,9 @@ function Reviews() {
 
 function Badges() {
   const { p } = useGame();
-  return <div className="badge-grid">{BADGES.map(([id, ico, name, desc]) => (
+  return <div className="badge-grid">{BADGES.map(([id, name, desc]) => (
     <div key={id} className={"badge" + (p.unlocked[id] ? " got" : "")}>
-      <span className="ico" aria-hidden>{ico}</span>
+      <Icon id={p.unlocked[id] ? "icon:cup" : "icon:cup-silver"} size={28} />
       <div><b>{name}</b><span>{p.unlocked[id] ? "Earned " + p.unlocked[id] : desc}</span></div>
     </div>))}
   </div>;

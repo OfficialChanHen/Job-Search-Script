@@ -13,15 +13,15 @@ export function FitChip({ j, resumes }: { j: Job; resumes: ResumeEntry[] }) {
   if (!f) return null;
   const b = f.best;
   const tip = f.need.length ? `Covers ${b.have.length} of the ${f.need.length} skills this posting names` + (b.missing.length ? `. Not on it: ${b.missing.join(", ")}` : "") : "Best match for this role type";
-  return <span className="chip flag-res" title={tip}>📄 {shortName(b.r.name)}{f.need.length ? `, ${b.have.length} of ${f.need.length} skills` : ""}</span>;
+  return <span className="chip flag-res" title={tip}>{shortName(b.r.name)}{f.need.length ? `, ${b.have.length} of ${f.need.length} skills` : ""}</span>;
 }
 
 export function FitBox({ j, resumes }: { j: Job; resumes: ResumeEntry[] }) {
   const f = fitFor(j, resumes);
-  if (!f) return <p className="none">Drop your resume PDFs into <b>📄 My resumes</b> (toolbar) to see which one fits this job best.</p>;
+  if (!f) return <p className="none">Add your resume PDFs in <b>Tools, Your resumes</b> to see which one fits this job best.</p>;
   return <>
     {f.all.map(x => (
-      <div className="rrow" key={x.r.name}><span>{shortName(x.r.name)}{x === f.best ? " ⭐" : ""}</span>
+      <div className="rrow" key={x.r.name}><span>{shortName(x.r.name)}{x === f.best ? " (best)" : ""}</span>
         <div className="track"><div className="fill" style={{ width: Math.round(x.pct * 100) + "%" }} /></div>
         <span className="num">{f.need.length ? `${x.have.length}/${f.need.length} skills` : x.role >= 12 ? "built for this role" : x.role ? "suits this role" : "—"}</span></div>
     ))}
@@ -39,18 +39,18 @@ export function RefPanel({ j, store, sent }: { j: Job; store: Store; sent: strin
   };
   return (
     <div className="ref">
-      <b>🤝 Get a referral</b>. A note to someone on the team gets far more replies than a cold application.
+      <b>Get a referral</b>. A note to someone on the team gets far more replies than a cold application.
       <div className="links">
-        <a className="mini" href={liSearch(j.company + " University of Wisconsin")} target="_blank" rel="noopener">🎓 UW–Madison alumni</a>
-        <a className="mini" href={liSearch(j.company + " recruiter")} target="_blank" rel="noopener">🧑‍💼 Recruiters</a>
-        <a className="mini" href={liSearch(j.company + " software engineer")} target="_blank" rel="noopener">👩‍💻 Engineers</a>
+        <a className="mini" href={liSearch(j.company + " University of Wisconsin")} target="_blank" rel="noopener">UW–Madison alumni</a>
+        <a className="mini" href={liSearch(j.company + " recruiter")} target="_blank" rel="noopener">Recruiters</a>
+        <a className="mini" href={liSearch(j.company + " software engineer")} target="_blank" rel="noopener">Engineers</a>
       </div>
       <textarea value={msg} onChange={e => setMsg(e.target.value)} aria-label="Referral message" />
       <div className="row2">
         <span className={"cc" + (msg.length > 300 ? " over" : "")}>{msg.length} of 300 characters. LinkedIn connection notes max out at 300.</span>
         <span>
-          <button className="mini" onClick={() => copyText(msg, "📋 Message copied. Paste it into LinkedIn.")}>📋 Copy message</button>{" "}
-          <button className={"mini " + (sent ? "ok" : "primary")} onClick={toggle}>{sent ? `✓ Reached out ${sent.slice(5)}` : "✉ I reached out (+30 XP)"}</button>
+          <button className="mini" onClick={() => copyText(msg, "Message copied. Paste it into LinkedIn.")}>Copy message</button>{" "}
+          <button className={"mini " + (sent ? "ok" : "primary")} onClick={toggle}>{sent ? `✓ Reached out ${sent.slice(5)}` : "I reached out (+30 XP)"}</button>
         </span>
       </div>
     </div>
@@ -71,8 +71,8 @@ function Draft({ j, store, k, label, resumes, kit }: { j: Job; store: Store; k: 
       <div className="khead"><b>{label}</b><span className={"tell" + (t.warn ? " warn" : "")}>{t.note}</span></div>
       <textarea value={text} onChange={e => set(e.target.value)} />
       <div className="row2">
-        <button className="mini" onClick={() => set(undefined)}>↺ Start over</button>
-        <button className="mini" onClick={() => copyText(text, "📋 Copied")}>📋 Copy</button>
+        <button className="mini" onClick={() => set(undefined)}>Start over</button>
+        <button className="mini" onClick={() => copyText(text, "Copied")}>Copy</button>
       </div>
     </div>
   );
@@ -91,12 +91,12 @@ export function KitPanel({ j, store, resumes, kit, applied, onApplied }: { j: Jo
           : f ? <>
             <p>Send <b>{shortName(f.best.r.name)}</b>{f.need.length ? ` (covers ${f.best.have.length} of ${f.need.length} skills named)` : ""}.</p>
             {f.best.missing.length > 0 && <p className="src">Not on it: {f.best.missing.join(", ")}. Leave those off unless you&apos;ve used them.</p>}
-          </> : <p className="none">Add your resume PDFs in <b>📄 My resumes</b> and this picks the best one for each job.</p>}
+          </> : <p className="none">Add your resume PDFs in <b>Tools, Your resumes</b> and this picks the best one for each job.</p>}
         <details className="usual"><summary>Your usual answers, ready to copy</summary>
         <div className="stds">{STD_FIELDS.map(([k, label]) => (
           <label className="std" key={k}><span>{label}</span>
             <input defaultValue={std(k)} onBlur={e => store.set(NS.kitStd, k, e.target.value)} placeholder="—" />
-            <button className="mini" title="Copy" onClick={e => copyText((e.currentTarget.previousElementSibling as HTMLInputElement).value)}>📋</button>
+            <button className="mini" title="Copy" onClick={e => copyText((e.currentTarget.previousElementSibling as HTMLInputElement).value)}>Copy</button>
           </label>))}
         </div></details>
       </div>

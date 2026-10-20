@@ -2,7 +2,7 @@
 /* Pixel-art sprites for the village (Ninja Adventure pack, CC0). public/sprites/manifest.json is
    written by tools/build_sprites.py. Frames are [col, row] cells of fw×fh, or [x, y, w, h] pixel
    rects. Characters have walk_/idle_/attack_ + down|up|left|right; bosses have idle and hurt
-   strips with their own image. Anything missing is drawn as its emoji, so the game always works. */
+   strips with their own image. Anything missing is simply not drawn. */
 
 type Frame = [number, number] | [number, number, number, number];
 interface Anim { frames: Frame[]; fps: number; src?: string; fw?: number; fh?: number }
@@ -14,7 +14,6 @@ interface Manifest {
 }
 export type Dir = "down" | "up" | "left" | "right";
 
-const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 let manifest: Manifest = {};
 const images = new Map<string, HTMLImageElement>();
 let loading: Promise<void> | null = null;
@@ -39,6 +38,14 @@ export function loadSprites(): Promise<void> {
 }
 export const faceUrl = (id: string) => manifest.faces?.[id];
 export const hasActor = (id: string) => !!manifest.actors?.[id];
+/** An actor's first idle frame, for drawing it as a still icon. */
+export function actorFrame(id: string): { img: HTMLImageElement; sx: number; sy: number; sw: number; sh: number } | undefined {
+  const a = manifest.actors?.[id], s = a && pick(a, "idle", "down");
+  if (!a || !s) return;
+  const f = s.frames[0], fw = s.fw ?? a.fw, fh = s.fh ?? a.fh;
+  const [sx, sy, sw, sh] = f.length === 4 ? f : [f[0] * fw, f[1] * fh, fw, fh];
+  return { img: img(s.src ?? a.src), sx, sy, sw, sh };
+}
 
 function pick(a: ActorDef, anim: string, dir: Dir): Anim | undefined {
   return a.anims[`${anim}_${dir}`] ?? a.anims[anim] ?? a.anims[`idle_${dir}`] ?? a.anims.idle ?? Object.values(a.anims)[0];
@@ -55,7 +62,7 @@ export function actorSize(id: string, anim = "idle", dir: Dir = "down"): { w: nu
 
 export interface DrawOpts { anim?: string; dir?: Dir; t?: number; scale: number; alpha?: number; flip?: boolean; once?: boolean; rotate?: number }
 /** Draw an actor standing at (x, y): bottom center, in canvas pixels. */
-export function drawActor(ctx: CanvasRenderingContext2D, id: string, emoji: string, x: number, y: number, o: DrawOpts) {
+export function drawActor(ctx: CanvasRenderingContext2D, id: string, x: number, y: number, o: DrawOpts) {
   const a = manifest.actors?.[id], s = a && pick(a, o.anim ?? "idle", o.dir ?? "down");
   const image = s ? img(s.src ?? a!.src) : undefined;
   ctx.save();
@@ -71,13 +78,6 @@ export function drawActor(ctx: CanvasRenderingContext2D, id: string, emoji: stri
     if (o.rotate) ctx.rotate(o.rotate);
     if (o.flip) ctx.scale(-1, 1);
     ctx.drawImage(image!, sx, sy, sw, sh, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
-  } else {
-    const size = 15 * o.scale;
-    ctx.font = `${size}px ${EMOJI_FONT}`;
-    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    ctx.translate(x, y);
-    if (o.flip) ctx.scale(-1, 1);
-    ctx.fillText(emoji, 0, 0);
   }
   ctx.restore();
 }

@@ -8,7 +8,7 @@ import { NS } from "@/lib/game/progress";
 import { localDay, weekStart } from "@/lib/game/time";
 import {
   BUILDINGS, CLASSES, COSMETICS, COS_KINDS, MATS, MAT_KEYS, RANK_AT, RANK_NAME, TIER_NAME, TRAITS, HUNTERS, armorFor, cosmetic, trophyCost, weaponFor,
-  type BuildingKey, type CosKind, type Mats, type TraitKey,
+  type BuildingKey, type CosDef, type CosKind, type Mats, type TraitKey,
 } from "@/lib/game/village/defs";
 import {
   applyFight, beds, burnRate, gearCap, bldCost, bossOf, buyBuilding, buyGearMany, claimRaid, daWage, efficiency, fightBoss, fillBeds, foodLeft, gearCost, gearOf,
@@ -18,13 +18,8 @@ import {
 } from "@/lib/game/village/engine";
 import { fightRecap, type RecapRow, type Unit } from "@/lib/game/village/sim";
 import { useGame, type Game } from "./GameContext";
+import { Icon } from "./Icon";
 
-/** A pixel portrait from the sprite pack, or the emoji while it loads. */
-export function Face({ id, fallback, size = 38 }: { id: string; fallback: string; size?: number }) {
-  const src = faceUrl(id);
-  // eslint-disable-next-line @next/next/no-img-element
-  return src ? <img className="face" src={src} alt="" width={size} height={size} /> : <span className="face" aria-hidden style={{ fontSize: size * 0.7 }}>{fallback}</span>;
-}
 import { fmtHrs, fmtN, toggleDA, useLiveVillage, useScene } from "./GamePanel";
 import { fmtClock, useNow } from "./useNow";
 import { useUi } from "./UiContext";
@@ -81,10 +76,10 @@ export function VillageWindow() {
     mutateVillage(g, v => applyFight(v, z, out.win, out.reward, party));
     host.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     const rows = fightRecap(p.units, out.log);
-    getScene().playFight(p.units, { ico: out.boss.ico, name: out.boss.name, hp: out.boss.hp, z }, out.log, out, () => {
+    getScene().playFight(p.units, { name: out.boss.name, hp: out.boss.hp, z }, out.log, out, () => {
       setRecap({ win: out.win, timeout: out.timeout, t: out.t, name: out.boss.name, rows });
       if (out.win) { toast(`You beat ${out.boss.name}. ${zoneDef(z + 1).name} is open, and you found ${fmtN(out.reward)} gold.`); confetti(120); }
-      else toast(out.timeout ? `⏱️ Time ran out against ${out.boss.name}. See "Get stronger" for what helps most.` : `💀 ${out.boss.name} won this time. See "Get stronger" for what helps most.`);
+      else toast(out.timeout ? `Time ran out against ${out.boss.name}. See "Get stronger" for what helps most.` : `${out.boss.name} won this time. See "Get stronger" for what helps most.`);
       force(x => x + 1);
     });
   };
@@ -94,8 +89,8 @@ export function VillageWindow() {
         <div className="vil-top">
           <div className="vil-res">
             {[["Gold", fmtN(goldNow(live, g.p)), ""], ["Food left", fed ? fmtHrs(huntHours(live, g.p)) : "None", fed ? "" : "low"],
-              ["Materials", MAT_KEYS.map(m => `${MATS[m].ico} ${fmtN(matsNow(live)[m])}`).join("  "), ""], ["Party power", fmtN(p.power), ""]].map(([l, v, c]) =>
-              <div key={l}><div className="l">{l}</div><div className={"v " + c}>{v}</div></div>)}
+              ["Materials", <span key="m" className="mats-row">{MAT_KEYS.map(m => <span key={m} title={MATS[m].name}><Icon id={MATS[m].sprite} size={18} />{fmtN(matsNow(live)[m])}</span>)}</span>, ""], ["Party power", fmtN(p.power), ""]].map(([l, v, c]) =>
+              <div key={String(l)}><div className="l">{l}</div><div className={"v " + c}>{v}</div></div>)}
           </div>
           <div className="vil-top-side">
             <HitmarkerToggle />
@@ -129,13 +124,13 @@ function HunterCard({ g, live, k, sel, select, doing, vital }: { g: Game; live: 
   const canUp = !!c && (gearPlan(live, g.p, k, "w", 1).n > 0 || gearPlan(live, g.p, k, "a", 1).n > 0);
   if (!c) return (
     <button className={"hcard locked" + (sel === k ? " sel" : "")} onClick={() => select(k)} title={`Solve any ${label} problem to recruit`}>
-      <span className={`tier tier${h.tier}`} /><Face id={"hunter:" + k} fallback={h.ico} /><div className="nm">{h.name}</div><div className="rk">Trains on {label}</div>
+      <span className={`tier tier${h.tier}`} /><Icon id={"hunter:" + k} /><div className="nm">{h.name}</div><div className="rk">Trains on {label}</div>
     </button>);
   return (
     <button className={"hcard" + (duty ? " duty" : "") + (sel === k ? " sel" : "")} onClick={() => select(k)} title={`${h.name}, ${CLASSES[h.cls].name}`}>
       <span className={`tier tier${h.tier}`} />{duty && <span className="rowtag">{rowOf(live, k) === "front" ? "FRONT" : "BACK"}</span>}
       {canUp && <span className="upbadge" title="You have the gold for a gear upgrade">UP</span>}
-      <div className="face-gear"><Face id={"hunter:" + k} fallback={h.ico} /><GearIcon cls={h.cls} lv={gearOf(live, k).w} rim={armorFor(gearOf(live, k).a).color} /></div>
+      <div className="face-gear"><Icon id={"hunter:" + k} /><GearIcon cls={h.cls} lv={gearOf(live, k).w} rim={armorFor(gearOf(live, k).a).color} /></div>
       <div className="nm">{h.name}</div><div className="rk">Rank {RANK_NAME[r]}, {label}</div>
       {u && <div className="hstats"><span title="Damage per hit">Dmg <b>{fmtN(u.atk)}</b></span><span title="Max HP">HP <b>{fmtN(u.hp)}</b></span></div>}
       {duty && vital !== undefined && <div className="hpmini" title={`Health in the field: ${pct(vital)}`}><div style={{ width: pct(vital), background: hpCol(vital) }} /></div>}
@@ -153,7 +148,7 @@ function HuntersCard({ g, live, p, sel, select, doing, vitals }: { g: Game; live
     if (!n) return null;
     const next = T.at.find(a => a > n);
     const tip = (lv ? T.what.replace("{}", pct(T.fx[lv - 1])) : `Needs ${T.at[0]} on duty`) + (next ? `. Next level at ${next}.` : "");
-    return <span key={t} className={"trait" + (lv ? " on" : "")} title={tip}>{T.ico} {T.name} {n}/{next || T.at[T.at.length - 1]}</span>;
+    return <span key={t} className={"trait" + (lv ? " on" : "")} title={tip}>{T.name} {n}/{next || T.at[T.at.length - 1]}</span>;
   }).filter(Boolean);
   return (
     <div className="vcard"><h3>On duty <span>{party.length} of {beds(live)} beds
@@ -201,7 +196,7 @@ function HunterDetail({ g, live, k, close, go, doing, vital }: { g: Game; live: 
   const solve = (n: number) => import("@/lib/game/progress").then(m => {
     const on = m.toggleSolved(g.store, n);
     floatText(on ? "+20 XP" : "-20 XP", on ? undefined : "var(--ink-3)");
-    if (on) floatText("+2h 🍖", "var(--warn)", 22);
+    if (on) floatText("+2h food", "var(--warn)", 22);
   });
   // what each upgrade would do: this hunter's stats, and the party's odds against the frontier boss
   const next = {
@@ -235,9 +230,9 @@ function HunterDetail({ g, live, k, close, go, doing, vital }: { g: Game; live: 
         <button className="mini" onClick={() => step(-1)} aria-label="Previous hunter" title="Previous (left arrow)">‹</button>
         <button className="mini" onClick={() => step(1)} aria-label="Next hunter" title="Next (right arrow)">›</button>
         <button className="mini" onClick={close}>Close</button></span></h3>
-      <div className="hdet"><Face id={"hunter:" + k} fallback={h.ico} size={64} /><div>
+      <div className="hdet"><Icon id={"hunter:" + k} size={64} /><div>
         <b style={{ fontSize: 16 }}>{h.name}</b>
-        <div className="sub2">{TIER_NAME[h.tier]} {C.ico} {C.name}. {C.note} Traits: {TRAITS[h.origin].ico} {TRAITS[h.origin].name} and {TRAITS[h.cls].ico} {TRAITS[h.cls].name}.</div>
+        <div className="sub2">{TIER_NAME[h.tier]} {C.name}. {C.note} Traits: {TRAITS[h.origin].name} and {TRAITS[h.cls].name}.</div>
         {c && u ? <>
           {doing && <p className="doing big">{doing}</p>}
           {duty && vital !== undefined && <>
@@ -301,13 +296,13 @@ function Grounds({ g, live, p, onFight, now, recap }: { g: Game; live: VillageSt
         const cls = z === live.zone ? "here" : z === live.unlocked + 1 ? "next locked" : lock ? "locked" : "";
         return <button key={z} className={"znode " + cls} title={d.name + (lock ? " (beat the boss before it to unlock)" : "")}
           onClick={() => { if (!lock && z !== live.zone) mutateVillage(g, v => pickZone(v, z)); }}>
-          <div className="dot">{lock ? "🔒" : d.mobs[0]}</div>{d.name}</button>;
+          <div className="dot"><Icon id={`mob:${((z - 1) % 9) + 1}:0`} size={28} /></div>{d.name}</button>;
       })}</div>
       <div>Hunting efficiency <b>{pct(eff)}</b></div>
       <div className={"meter " + (eff >= 0.6 ? "good" : "red")}><div style={{ width: pct(eff) }} /></div>
       <div className="lead">{note} {p.units.length ? (fed ? <>Gathering about {matsLine(matsPerHour(p, live.zone), matsBonus(p))} an hour, for cosmetics in the Workshop.</>
         : <b>Hunters are asleep with no food. One application feeds them for 4 hours.</b>) : null}</div>
-      <div className="boss"><Face id={`boss:${((live.unlocked - 1) % 9) + 1}${Math.floor((live.unlocked - 1) / 9) % 2 ? ":alt" : ""}`} fallback={boss.ico} size={48} /><div>
+      <div className="boss"><Icon id={`boss:${((live.unlocked - 1) % 9) + 1}${Math.floor((live.unlocked - 1) / 9) % 2 ? ":alt" : ""}`} size={48} /><div>
         <b>{boss.name}</b>, the zone {live.unlocked} boss
         {quirks.map(([ql, qd, qc]) => <div key={ql}>
           <div className="q">{ql}. {qd}</div>
@@ -334,7 +329,7 @@ function FightRecap({ r }: { r: Recap }) {
       {r.rows.slice().sort((a, b) => b.dealt - a.dealt).map(x => {
         const h = HUNTERS[x.k];
         return <div className="recap-row" key={x.k}>
-          <Face id={"hunter:" + x.k} fallback={h.ico} size={24} />
+          <Icon id={"hunter:" + x.k} size={24} />
           <div><div className="recap-top"><b>{h.name.split(" ")[0]}</b><span>{fmtN(x.dealt)} damage, {pct(x.dealt / total)}</span></div>
             <div className="meter"><div style={{ width: pct(x.dealt / top) }} /></div>
             <div className="sub2">{x.hits} hits, {x.crits} crits{x.misses ? `, ${x.misses} missed` : ""}. Took {fmtN(x.taken)}{x.down ? ". Knocked out" : ""}.</div></div>
@@ -348,21 +343,21 @@ function FightRecap({ r }: { r: Recap }) {
 function Hints({ g, live, openQp, close }: { g: Game; live: VillageState; openQp: () => void; close: () => void }) {
   const hs = powerHints(live, g.ctx), food = huntHours(live, g.p), fed = food > 0, pay = payFor(live);
   const target = bossOf(hintZone(live, partyUnits(live, g.ctx)));
-  const solve = (n: number) => import("@/lib/game/progress").then(m => { m.toggleSolved(g.store, n); floatText("+20 XP"); floatText("+2h 🍖", "var(--warn)", 22); });
+  const solve = (n: number) => import("@/lib/game/progress").then(m => { m.toggleSolved(g.store, n); floatText("+20 XP"); floatText("+2h food", "var(--warn)", 22); });
   return (
-    <div className="vcard"><h3>Get stronger with real work <span>Aiming at {target.ico} {target.name}</span></h3>
+    <div className="vcard"><h3>Get stronger with real work <span>Aiming at {target.name}</span></h3>
       <div className="paylist" aria-label="Gold each real action pays today">
         <span className="lead">Gold only comes from real work. Today it pays:</span>
         {([["Application", pay.app], ["LeetCode solve", pay.solve], ["Review", pay.review], ["Outreach or follow-up", pay.outreach],
            ["All quests done", pay.questClear], ["DataAnnotation hour", pay.daHour]] as const).map(([l, n]) =>
           <span className="pay" key={l}>{l} <b>{fmtN(n)}</b></span>)}
       </div>
-      {food < 12 && <div className="hint"><span className="ico">🍖</span>
+      {food < 12 && <div className="hint">
         <span className="txt">{fed ? `Food runs out in ${fmtHrs(food)}.` : "Your hunters are out of food and asleep."} Each application feeds them for 4 more hours.</span>
         <span className="gain">+4h food<br />+{fmtN(pay.app)} gold</span>
-        <div className="btns"><button className="mini primary" onClick={openQp}>🎮 Quick Play</button><button className="mini" onClick={close}>Browse jobs</button></div></div>}
+        <div className="btns"><button className="mini primary" onClick={openQp}>Quick Play</button><button className="mini" onClick={close}>Browse jobs</button></div></div>}
       {hs.map(h => (
-        <div className="hint" key={h.k + h.text}><span className="ico">{HUNTERS[h.k].ico}</span><span className="txt">{h.text}</span>
+        <div className="hint" key={h.k + h.text}><span className="txt">{h.text}</span>
           <span className="gain">{!h.bench && h.dw > 0.004 && <>+{pct(h.dw)} to win</>}{!h.bench && h.prob && <><br />+{fmtN(h.prob.review ? pay.review : pay.solve)} gold</>}</span>
           <div className="btns">
             {h.bench ? <button className="mini primary" onClick={() => act(g, live, v => toggleDuty(v, h.k))}>Put on duty</button>
@@ -395,7 +390,7 @@ function Buildings({ g, live }: { g: Game; live: VillageState; p: Party }) {
       {(Object.entries(BUILDINGS) as [BuildingKey, typeof BUILDINGS[BuildingKey]][]).map(([b, B]) => {
         const lv = live.bld[b], max = lv >= B.max, cost = max ? 0 : bldCost(b, lv);
         return <div className="bld" key={b}>
-          <div className="t"><span>{B.ico} {B.name}</span><span>Level {lv}</span></div>
+          <div className="t"><span className="bld-name"><Icon id={"bld:" + b} size={28} />{B.name}</span><span>Level {lv}</span></div>
           <div className="d">{B.what(lv)}.</div>
           {!max && (() => { const [l, a, b2] = preview(b); return <div className="bld-delta">{l}: {a} <span aria-hidden>→</span> <b className="up">{b2}</b></div>; })()}
           {max ? <button className="mini" disabled>Max level</button>
@@ -407,12 +402,15 @@ function Buildings({ g, live }: { g: Game; live: VillageState; p: Party }) {
   );
 }
 
+/** The sprite a cosmetic shows in the Workshop. Auras and pennants show their color instead. */
+const THEME_ICON: Record<string, string> = { autumn: "prop:autumntree", blossom: "prop:pinktree", snow: "prop:snowtree", night: "icon:moon" };
+const cosIcon = (c: CosDef) => c.sprite ?? THEME_ICON[c.id] ?? "deco:" + c.id;
 const matsLine = (m: Mats, k = 1) => MAT_KEYS.map(x => `${(m[x] * k).toFixed(m[x] * k < 10 ? 1 : 0)} ${MATS[x].name.toLowerCase()}`).join(", ");
 /** A cost as material chips, dimmed when you can't cover that part yet. */
 function Cost({ live, cost }: { live: VillageState; cost: Partial<Mats> }) {
   const have = matsNow(live);
   return <span className="cost">{MAT_KEYS.filter(m => cost[m]).map(m =>
-    <span key={m} className={have[m] >= cost[m]! ? "" : "short"} title={`${MATS[m].name}: you have ${Math.floor(have[m])}`}>{MATS[m].ico} {cost[m]}</span>)}</span>;
+    <span key={m} className={have[m] >= cost[m]! ? "" : "short"} title={`${MATS[m].name}: you have ${Math.floor(have[m])}`}><Icon id={MATS[m].sprite} size={16} />{cost[m]}</span>)}</span>;
 }
 
 /** Cosmetics bought with materials hunting gathers. Looks only: no gear, no stats. */
@@ -422,7 +420,7 @@ function Workshop({ g, live }: { g: Game; live: VillageState }) {
   const items = COSMETICS.filter(c => c.kind === kind);
   return (
     <div className="vcard"><h3>Workshop <span>Cosmetics, paid with materials</span></h3>
-      <div className="mats">{MAT_KEYS.map(m => <span key={m} className="mat"><Face id={MATS[m].sprite} fallback={MATS[m].ico} size={18} /> {MATS[m].name} <b>{fmtN(have[m])}</b></span>)}</div>
+      <div className="mats">{MAT_KEYS.map(m => <span key={m} className="mat"><Icon id={MATS[m].sprite} size={18} /> {MATS[m].name} <b>{fmtN(have[m])}</b></span>)}</div>
       <div className="lead">Hunters gather materials while they hunt, and zone bosses drop some. They only buy looks, never gear or stats.</div>
       <div className="seg" role="tablist" aria-label="Kind of cosmetic">
         {(Object.keys(COS_KINDS) as CosKind[]).map(k => <button key={k} role="tab" aria-selected={kind === k} className={"seg-btn" + (kind === k ? " on" : "")} onClick={() => setKind(k)}>{COS_KINDS[k]}</button>)}
@@ -430,7 +428,7 @@ function Workshop({ g, live }: { g: Game; live: VillageState }) {
       <div className="cos-grid">{items.map(c => {
         const owned = !!live.cos[c.id], using = c.kind === "theme" && live.theme === c.id;
         return <div className={"cos" + (owned ? " owned" : "")} key={c.id}>
-          <div className="cos-ico" style={c.color ? { background: c.color } : undefined}>{c.color ? "" : c.ico}</div>
+          <div className="cos-ico" style={c.color ? { background: c.color } : undefined}>{!c.color && <Icon id={cosIcon(c)} size={30} />}</div>
           <div className="cos-nm">{c.name}</div>
           {c.note && <div className="sub2">{c.note}</div>}
           {!owned ? <>
@@ -458,7 +456,7 @@ function Trophies({ g, live }: { g: Game; live: VillageState }) {
       <div className="shelf">{beaten.map(z => {
         const b = bossOf(z), id = `boss:${((z - 1) % 9) + 1}${Math.floor((z - 1) / 9) % 2 ? ":alt" : ""}`, has = !!live.trophies[z], cost = trophyCost(z);
         return <div className={"trophy" + (has ? " on" : "")} key={z} title={b.name}>
-          <Face id={id} fallback={b.ico} size={40} />
+          <Icon id={id} size={40} />
           <div className="sub2">Zone {z}</div>
           {has ? <span className="tag good">On the shelf</span> : <>
             <Cost live={live} cost={cost} />
@@ -474,7 +472,7 @@ function Raid({ g, live }: { g: Game; live: VillageState }) {
   const R = raidState(live, g.p), done = R.dmg >= R.hp, left = Math.max(0, R.hp - R.dmg);
   return (
     <div className="vcard"><h3>Weekly world boss <span>Resets Monday</span></h3>
-      <div className="raid"><div className="spr">{R.boss[0]}</div><div>
+      <div className="raid"><div className="spr"><Icon id={R.boss[0]} size={56} /></div><div>
         <b>{R.boss[1]}</b>
         <div>{done ? "Defeated this week!" : `${fmtN(left)} of ${fmtN(R.hp)} HP left`}</div>
         <div className="stackbar">
@@ -505,10 +503,10 @@ function DACard({ g, live, now }: { g: Game; live: VillageState; now: number }) 
     if (!(m > 0 && m <= 720)) return toast("Enter minutes between 1 and 720", true);
     const r = logDA(g.store, live, today, m);
     floatText(`+${fmtN(r.g)} gold`, "var(--ochre)"); setMin("");
-    toast(`💼 Added ${fmtHrs(m / 60)} of DataAnnotation`);
+    toast(`Added ${fmtHrs(m / 60)} of DataAnnotation`);
   };
   return (
-    <div className="vcard"><h3>💼 DataAnnotation <span>Work as long as you like</span></h3>
+    <div className="vcard"><h3>DataAnnotation <span>Work as long as you like</span></h3>
       <div className="lead">An hour of work pays <b>{fmtN(daWage(live))}</b> gold and an hour of food.</div>
       <div className="da-big" style={run ? {} : { color: "var(--ink-3)", fontSize: 18 }}>{run ? fmtClock(now - run) : "Timer is off"}</div>
       {run > 0 && <div className="lead">So far this session: about {fmtN((now - run) / 3600e3 * daWage(live))} gold</div>}

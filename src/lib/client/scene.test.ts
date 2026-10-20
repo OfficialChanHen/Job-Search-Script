@@ -29,7 +29,7 @@ function sizedScene() {
   document.body.append(host);
   const s = new VillageScene();
   s.mount(host);
-  s.update({ units: Object.fromEntries(PARTY.map(u => [u.k, u])), fed: true, eff: 0.6, dps: 150, zone: { z: 1, name: "Fields", mobs: ["📄", "🤖"] },
+  s.update({ units: Object.fromEntries(PARTY.map(u => [u.k, u])), fed: true, eff: 0.6, dps: 150, zone: { z: 1, name: "Fields" },
              bld: { inn: 3, kitchen: 1, forge: 1, market: 1 }, daRunning: false, anyTrained: true, gear: {}, hitmarkers: true });
   return { s, inner: s as unknown as Inner };
 }
@@ -69,7 +69,7 @@ describe("field combat on the map", () => {
       { t: 1.5, a: "slam" as const, dmg: 30, hps: [210, 270, 270, 270, 270] },
     ];
     let done = false;
-    s.playFight(PARTY, { ico: "📞", name: "Gatekeeper", hp: 1000, z: 1 }, log, { win: false, timeout: true, t: 2 }, () => { done = true; });
+    s.playFight(PARTY, { name: "Gatekeeper", hp: 1000, z: 1 }, log, { win: false, timeout: true, t: 2 }, () => { done = true; });
     const f = () => inner.fight as { dash: number[]; hp: number[]; blunge: number } | null;
     let dashed = false, shot = false, bossSwung = false;
     for (let t = 0; t < 8 && !done; t += 0.02) {

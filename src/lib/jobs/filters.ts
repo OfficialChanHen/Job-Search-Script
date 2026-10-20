@@ -5,9 +5,9 @@ import { outcomeOf } from "@/lib/game/sheet";
 import { daysSince, parseSheetDate } from "@/lib/game/time";
 
 export const TABS: [string, string][] = [
-  ["new", "🆕 New today"], ["all", "All jobs"], ["direct", "🔗 Direct link"], ["parttime", "🏪 Local part-time"],
-  ["onsite", "🏢 In-person"], ["hybrid", "🔀 Hybrid"], ["remote", "🌐 Remote"], ["junior", "🎓 Entry-level"],
-  ["swe", "💻 SWE"], ["adjacent", "🧭 Tech-adjacent"], ["saved", "★ Saved"], ["applied", "✓ Applied"], ["hidden", "🚫 Hidden"],
+  ["new", "New today"], ["all", "All jobs"], ["direct", "Direct link"], ["parttime", "Local part-time"],
+  ["onsite", "In person"], ["hybrid", "Hybrid"], ["remote", "Remote"], ["junior", "Entry-level"],
+  ["swe", "SWE"], ["adjacent", "Tech-adjacent"], ["saved", "Saved"], ["applied", "Applied"], ["hidden", "Hidden"],
 ];
 export const JOB_TYPES: [string, string][] = [
   ["Full-time", "Full-time"], ["", "All job types"], ["Contract", "Contract"], ["Part-time", "Part-time"],

@@ -85,9 +85,9 @@ function TopBar() {
     : state === "idle" ? "Synced" : state === "syncing" ? "Syncing" : state === "offline" ? "Offline, will sync" : "Retrying sync";
   return (
     <header className="topbar">
-      <Link className="wordmark" href="/">Job <em>hunt</em></Link>
+      <Link className="wordmark" href="/">Job hunt</Link>
       <div className="topbar-side">
-        <span className="sync" title={user ?? undefined}><i className={"sync-dot " + state} aria-hidden />{label}</span>
+        <span className="sync" title={user ?? undefined}>{label}</span>
         {user
           ? <button className="pill quiet" onClick={async () => { await supabaseBrowser()?.auth.signOut(); toast("Signed out. This device keeps a copy."); }} title={user}>Sign out</button>
           : SYNC_ENABLED && <button className="pill" onClick={() => setDrawer("account")}>Sign in</button>}
@@ -196,7 +196,7 @@ function useCelebrations(game: Game) {
     const r = checkProgress(store, () => gameStats(snapshot(store), byId, facts), new Date());
     if (first.current) { first.current = false; return; }      // don't celebrate old progress on load
     if (r.cleared) { toast("Every quest done for today. That's 50 XP and a day's food."); confetti(80); }
-    r.badges.forEach(([, , name], i) => setTimeout(() => toast(`New badge: ${name}. 25 XP.`), 300 + i * 1200));
+    r.badges.forEach(([, name], i) => setTimeout(() => toast(`New badge: ${name}. 25 XP.`), 300 + i * 1200));
     if (r.levelUp) setTimeout(() => { toast(`Level ${r.levelUp}. You're now ${titleFor(levelFor(r.stats.xp))}.`); confetti(130); }, r.badges.length ? 1400 : 200);
   }, [game]);
 }

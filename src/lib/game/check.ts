@@ -15,7 +15,7 @@ export function checkProgress(store: Store, compute: () => Stats, now: Date = ne
     cleared = true;
     s = compute();
   }
-  const fresh = BADGES.filter(([id, , , , test]) => !store.get(NS.badge, id) && test(s));
+  const fresh = BADGES.filter(([id, , , test]) => !store.get(NS.badge, id) && test(s));
   if (fresh.length) {
     store.batch(() => fresh.forEach(([id]) => store.set(NS.badge, id, today)));
     s = compute();

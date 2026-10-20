@@ -4,15 +4,15 @@
    zone's monsters, go back to the inn to rest, and sleep there when there's no
    food. Boss fights replay a simulation log on the field. One canvas, moved
    between wherever the village is shown. Pixel art from the Ninja Adventure
-   pack (CC0), drawn through sprites.ts; emoji stand in for anything missing. */
-import { BUILDINGS, HUNTERS, MOB_NAMES, armorFor, cosmetic, gearTier, weaponFor, type BuildingKey } from "@/lib/game/village/defs";
+   pack (CC0), drawn through sprites.ts. */
+import { HUNTERS, MOB_NAMES, armorFor, cosmetic, gearTier, weaponFor, type BuildingKey } from "@/lib/game/village/defs";
 import type { FightEvent, Unit } from "@/lib/game/village/sim";
 import { actorSize, animLength, drawActor, drawGround, loadSprites, type Dir } from "./sprites";
 
 export interface SceneInput {
   units: Record<string, Unit>;
   fed: boolean; eff: number; dps: number;
-  zone: { z: number; name: string; mobs: string[] };
+  zone: { z: number; name: string };
   bld: Record<BuildingKey, number>;
   daRunning: boolean;
   anyTrained: boolean;
@@ -34,12 +34,12 @@ interface Hunter extends Walker {
   hp: number; max: number;   // field health: low health sends them back to the inn to heal
   side: number; sideFor: Mob | null;   // which side of its target it stands on, picked once per target
 }
-interface Mob extends Walker { ico: string; i: number; hp: number; max: number; flash: number; dead: number; think: number; cd: number; lunge: number; lx: number; ly: number; turn: number }
+interface Mob extends Walker { i: number; hp: number; max: number; flash: number; dead: number; think: number; cd: number; lunge: number; lx: number; ly: number; turn: number }
 interface Fx { x: number; y: number; text?: string; actor?: string; mark?: boolean; ring?: string; color?: string; size: number; life: number; max: number; vy: number }
 /** Something flying: an arrow or spell from a sniper, or a monster's or boss's shot. It lands after `dur`. */
 interface Shot { x0: number; y0: number; to: () => Pt; t: number; dur: number; kind: "arrow" | "bolt" | "orb"; color: string; land: () => void }
 interface Fight {
-  units: Unit[]; boss: { ico: string; name: string; hp: number; z: number }; log: FightEvent[]; win: boolean; timeout: boolean;
+  units: Unit[]; boss: { name: string; hp: number; z: number }; log: FightEvent[]; win: boolean; timeout: boolean;
   t: number; i: number; speed: number; bhp: number; hp: number[]; lunge: number[]; flash: number[]; bflash: number; end: number; onDone: () => void;
   dash: number[];            // melee hunters run in to strike: time left on each dash
   blunge: number; btarget: number;   // the boss winding up at one hunter
@@ -312,9 +312,9 @@ export class VillageScene {
     });
   }
   private spawnMob() {
-    const inp = this.input!, i = Math.floor(Math.random() * inp.zone.mobs.length), p = this.fieldPoint();
+    const inp = this.input!, i = Math.floor(Math.random() * 2), p = this.fieldPoint();
     const hp = Math.max(30, (inp.dps || 30) * 2.4 / Math.max(inp.eff || 0.2, 0.15));
-    this.mobs.push({ ico: inp.zone.mobs[i], i, ...p, tx: p.x, ty: p.y, dir: "down", speed: 9 + Math.random() * 6, moving: false,
+    this.mobs.push({ i, ...p, tx: p.x, ty: p.y, dir: "down", speed: 9 + Math.random() * 6, moving: false,
                      hp, max: hp, flash: 0, dead: 0, think: Math.random() * 3, cd: 1 + Math.random(), lunge: 0, lx: 0, ly: 0, turn: 0 });
   }
 
@@ -468,8 +468,8 @@ export class VillageScene {
   }
   private addEmote(h: Hunter, id: string) { this.fx.push({ x: h.x + 6 * this.S, y: h.y - 16 * this.S, actor: id, size: 1, life: 0, max: 0.8, vy: -6 }); }
 
-  private sprite(id: string, emoji: string, x: number, y: number, anim = "idle", dir: Dir = "down", alpha = 1, scale = 1, t = this.clock) {
-    drawActor(this.ctx!, id, emoji, x, y, { anim, dir, t, scale: this.S * scale, alpha });
+  private sprite(id: string, x: number, y: number, anim = "idle", dir: Dir = "down", alpha = 1, scale = 1, t = this.clock) {
+    drawActor(this.ctx!, id, x, y, { anim, dir, t, scale: this.S * scale, alpha });
   }
   private font(size: number) { return `600 ${size}px ${this.fontFam}`; }
   /** A floating number: light fill, crisp dark outline. */
@@ -516,23 +516,23 @@ export class VillageScene {
     // everything that stands on the ground is drawn back to front
     type D = { y: number; draw: () => void };
     const list: D[] = [];
-    this.props.forEach(p => list.push({ y: p.y, draw: () => this.sprite(p.id, "🌳", p.x, p.y) }));
+    this.props.forEach(p => list.push({ y: p.y, draw: () => this.sprite(p.id, p.x, p.y) }));
     BLD_SLOTS.forEach(b => {
       const p = this.bldPos(b);
-      list.push({ y: p.y, draw: () => this.sprite("bld:" + b, BUILDINGS[b].ico, p.x, p.y) });
+      list.push({ y: p.y, draw: () => this.sprite("bld:" + b, p.x, p.y) });
     });
     const slots = this.decoSlots();
     (inp.decos ?? []).forEach((id, i) => {
       const c = cosmetic(id), p = slots[i % Math.max(1, slots.length)];
       if (!c || !p) return;
       const big = c.sprite?.startsWith("bld:");
-      list.push({ y: p.y, draw: () => this.sprite(c.sprite ?? "deco:" + id, c.ico, p.x, p.y, "idle", "down", 1, c.sprite ? (big ? 0.6 : 0.85) : 0.55) });
+      list.push({ y: p.y, draw: () => this.sprite(c.sprite ?? "deco:" + id, p.x, p.y, "idle", "down", 1, big ? 0.6 : 0.85) });
     });
     if (inp.daRunning) {
       const m = this.door("market");
       list.push({ y: m.y + 3 * this.S, draw: () => {
-        this.sprite("npc:you", "🧑‍💻", m.x + 12 * this.S, m.y + 3 * this.S, "walk", "down", 1, 1, this.clock * 0.5);
-        this.sprite("emote:star", "💼", m.x + 12 * this.S, m.y - 14 * this.S);
+        this.sprite("npc:you", m.x + 12 * this.S, m.y + 3 * this.S, "walk", "down", 1, 1, this.clock * 0.5);
+        this.sprite("emote:star", m.x + 12 * this.S, m.y - 14 * this.S);
       } });
     }
     if (this.fight) this.collectFight(list);
@@ -540,7 +540,7 @@ export class VillageScene {
       this.mobs.forEach(m => list.push({ y: m.y, draw: () => {
         const id = `mob:${zi}:${m.i}${alt ? ":alt" : ""}`;
         const ml = m.lunge > 0 ? 4 * this.S : 0;
-        this.sprite(id, m.ico, m.x + m.lx * ml, m.y + m.ly * ml, m.moving || m.lunge > 0 ? "walk" : "idle", m.dir, m.dead ? Math.max(0, 1 - m.dead * 2.4) : 1);
+        this.sprite(id, m.x + m.lx * ml, m.y + m.ly * ml, m.moving || m.lunge > 0 ? "walk" : "idle", m.dir, m.dead ? Math.max(0, 1 - m.dead * 2.4) : 1);
         if (m.flash > 0) this.flashAt(m.x, m.y, "rgba(255,255,255,0.55)");
         if (!m.dead) this.hpBar(m.x, m.y - 19 * this.S, 14 * this.S, m.hp / m.max, this.ink.crit);
       } }));
@@ -555,7 +555,7 @@ export class VillageScene {
         this.drawHunter(h.k, h.x + lx, h.y + ly, anim, h.dir, h.lunge > 0, 1, this.clock + h.slot * 0.13);
         if (h.flash > 0) this.flashAt(h.x, h.y, "rgba(156,74,70,0.4)");
         if (h.state !== "sleep") this.hpBar(h.x, h.y + 2 * this.S, 14 * this.S, h.hp / h.max, hpColor(h.hp / h.max));
-        if (sleeping) this.sprite(h.state === "sleep" ? "emote:sleep" : "emote:heart", h.state === "sleep" ? "💤" : "❤️",
+        if (sleeping) this.sprite(h.state === "sleep" ? "emote:sleep" : "emote:heart",
                                   h.x + 6 * this.S, h.y - 16 * this.S - (REDUCED ? 0 : Math.abs(Math.sin(this.clock * 2 + h.slot)) * 2 * this.S));
       } }));
     }
@@ -582,7 +582,7 @@ export class VillageScene {
       } else if (f.ring) {
         ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = f.ring; ctx.lineWidth = 2 * this.S;
         ctx.beginPath(); ctx.ellipse(f.x, f.y - this.S, (7 + f.life * 16) * this.S * f.size, (2.6 + f.life * 6) * this.S * f.size, 0, 0, 7); ctx.stroke(); ctx.restore();
-      } else if (f.actor) drawActor(ctx, f.actor, "✨", f.x, f.y, { t: f.life, scale: this.S, once: true, alpha: f.actor === "fx:coin" || f.actor.startsWith("res:") ? a : 1 });
+      } else if (f.actor) drawActor(ctx, f.actor, f.x, f.y, { t: f.life, scale: this.S, once: true, alpha: f.actor === "fx:coin" || f.actor.startsWith("res:") ? a : 1 });
       else if (f.text) { ctx.save(); ctx.globalAlpha = a; this.num(f.text, f.x, f.y, f.color ?? NUM.hit, f.size); ctx.restore(); }
     });
     if (!this.fight) {
@@ -608,7 +608,7 @@ export class VillageScene {
     const side = dir === "left" ? -1 : 1, behind = dir === "up";
     const wx = x + (dir === "up" ? -5 : dir === "down" ? 6 : 6 * side) * S, wy = y - 4 * S;
     const rot = (swing ? 1.1 : 0.35) * side;
-    const drawWeapon = () => drawActor(c, "weapon:" + weapon, "", wx, wy, { scale: S * 0.72, rotate: rot, alpha, flip: side < 0 });
+    const drawWeapon = () => drawActor(c, "weapon:" + weapon, wx, wy, { scale: S * 0.72, rotate: rot, alpha, flip: side < 0 });
     const pen = cosmetic(this.input?.look?.[k]?.pennant ?? "")?.color;
     if (pen) {          // a little flag on the hunter's back, waving
       const px = x - (dir === "left" ? -5 : 5) * S, top = y - 23 * S, wave = REDUCED ? 0 : Math.sin(this.clock * 6 + x) * 1.2 * S;
@@ -619,7 +619,7 @@ export class VillageScene {
       c.restore();
     }
     if (behind) drawWeapon();
-    this.sprite("hunter:" + k, h?.ico ?? "🧍", x, y, anim, dir, alpha, 1, t);
+    this.sprite("hunter:" + k, x, y, anim, dir, alpha, 1, t);
     if (!behind) drawWeapon();
   }
   /** A soft glow under a hunter wearing an aura. */
@@ -811,7 +811,7 @@ export class VillageScene {
     const tp = this.fightPos(f.btarget), bl = f.blunge > 0 ? Math.sin((1 - f.blunge / 0.3) * Math.PI) * 8 * this.S : 0;
     const bd = Math.hypot(tp.x - b.x, tp.y - b.y) || 1;
     list.push({ y: b.y, draw: () => {
-      this.sprite(id, f.boss.ico, b.x + (tp.x - b.x) / bd * bl, b.y + (tp.y - b.y) / bd * bl * 0.4, f.bflash > 0 ? "hurt" : "idle", "down", f.end && f.win ? Math.max(0, f.end / 2.4) : 1, bs);
+      this.sprite(id, b.x + (tp.x - b.x) / bd * bl, b.y + (tp.y - b.y) / bd * bl * 0.4, f.bflash > 0 ? "hurt" : "idle", "down", f.end && f.win ? Math.max(0, f.end / 2.4) : 1, bs);
       this.hpBar(b.x, b.y - bh - 6 * this.S, 44 * this.S, f.bhp / f.boss.hp, this.ink.crit);
       this.label(`${f.boss.name}  ${fmtN(Math.max(0, f.bhp))} HP`, b.x, b.y - bh - 14 * this.S, 11);
     } });

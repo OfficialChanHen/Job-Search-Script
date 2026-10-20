@@ -82,7 +82,18 @@ PROPS = {
     "tree": (0, 0, 32, 32), "pine": (32, 0, 32, 32), "deadtree": (64, 0, 32, 32), "roundtree": (96, 0, 32, 32),
     "snowtree": (128, 0, 32, 32), "snowpine": (160, 0, 32, 32), "pinktree": (224, 0, 32, 32), "oliveTree": (288, 0, 32, 32),
     "rocks": (193, 83, 61, 44), "greyrocks": (257, 83, 61, 44), "rock": (210, 132, 29, 27), "greyrock": (258, 132, 29, 27),
-    "stump": (1, 134, 30, 23),
+    "stump": (1, 134, 30, 23), "autumntree": (144, 288, 48, 48), "sunflowers": (0, 176, 32, 16),
+}
+# decorations from the other tilesets: (file, x, y, w, h)
+DECOS = {
+    "campfire": ("tileset_camp.png", 160, 48, 32, 32), "lantern": ("tileset_camp.png", 96, 80, 16, 32),
+    "banner": ("TilesetHouse.png", 368, 320, 16, 32), "well": ("TilesetHouse.png", 48, 248, 32, 30),
+    "statue": ("TilesetHouse.png", 16, 248, 32, 40),
+}
+# small item icons the cards show (paths inside the pack)
+ICONS = {
+    "cup": "Items/Treasure/GoldCup.png", "cup-silver": "Items/Treasure/SilverCup.png", "food": "Items/Food/Meat.png",
+    "moon": "Ui/Skill Icon/Meteo/Moon.png", "coin": "Items/Treasure/GoldCoin.png", "money": "Items/Object/MoneyBag.png",
 }
 EMOTES = {"sleep": 28, "heart": 27, "alert": 22, "star": 29}
 # held weapons (Items/Weapons/<name>/Sprite.png): the tiers a hunter's weapon steps through as it levels
@@ -218,6 +229,11 @@ def main() -> None:
         actors["bld:" + k] = {"src": house, "fw": w, "fh": h, "anims": {"idle": {"frames": [[x, y, w, h]], "fps": 1}}}
     for k, (x, y, w, h) in PROPS.items():
         actors["prop:" + k] = {"src": nature, "fw": w, "fh": h, "anims": {"idle": {"frames": [[x, y, w, h]], "fps": 1}}}
+    for k, (file, x, y, w, h) in DECOS.items():
+        src = house if file == "TilesetHouse.png" else copy(tiles / file, "town/" + file.removeprefix("tileset_").lower())
+        actors["deco:" + k] = {"src": src, "fw": w, "fh": h, "anims": {"idle": {"frames": [[x, y, w, h]], "fps": 1}}}
+    for k, path in ICONS.items():
+        faces["icon:" + k] = copy(PACK / path, "icons/" + Path(path).name)
 
     fx = PACK / "FX"
     for key, path, fps in (("fx:slash", fx / "Slash" / "SpriteSheetSlash01.png", 20), ("fx:smoke", fx / "Smoke" / "Smoke" / "SpriteSheet.png", 14),
@@ -232,6 +248,7 @@ def main() -> None:
         w, h = png_size(path)
         src = copy(path, f"res/{name}.png")
         actors[key] = {"src": src, "fw": w, "fh": h, "anims": {"idle": {"frames": [[0, 0]], "fps": 1}}}
+        faces[key] = src   # and the Workshop and costs show them as icons
     coin = strip_anim(PACK / "Items" / "Treasure" / "Coin2.png", "fx/coin.png", 10)
     actors["fx:coin"] = {"src": coin["src"], "fw": coin["fw"], "fh": coin["fh"], "anims": {"idle": coin}}
     for name in WEAPONS:

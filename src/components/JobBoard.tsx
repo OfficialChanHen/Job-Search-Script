@@ -59,17 +59,18 @@ export default function JobBoard() {
   const active = [jobType !== "Full-time", !!cat, !!source, sort !== "score", !MAIN_VIEWS.some(([k]) => k === view)].filter(Boolean).length;
   const n = list.rows.length, appliedCount = counts.applied;
   const viewName = (MAIN_VIEWS.find(([k]) => k === view) ?? MORE_VIEWS.find(([k]) => k === view) ?? ["", ""])[1].toLowerCase();
-  const sentence = view === "new"
-    ? <><b>{n}</b> new {n === 1 ? "listing" : "listings"} from the {latest} scrape. You&apos;ve applied to {appliedCount} so far.</>
-    : view === "applied" ? <>You&apos;ve applied to <b>{appliedCount}</b> {appliedCount === 1 ? "job" : "jobs"}.</>
-    : view === "saved" ? <><b>{n}</b> saved for later.</>
-    : <><b>{n.toLocaleString()}</b> {viewName === "all" ? "open" : viewName} {n === 1 ? "listing" : "listings"}.</>;
+  const jobs = (k: number) => k === 1 ? "job" : "jobs";
+  const title = view === "new" ? `${n} new ${jobs(n)}`
+    : view === "applied" ? `Applied to ${appliedCount}`
+    : view === "saved" ? `${n} saved`
+    : `${n.toLocaleString()} ${viewName === "all" ? "open" : viewName} ${jobs(n)}`;
+  const sentence = view === "new" ? <>From the {latest} scrape. You&apos;ve applied to {appliedCount} so far.</>
+    : view === "saved" ? <>Saved for later.</> : null;
 
   return (
     <>
       <header className="jobs-head">
-        <p className="eyebrow">Entry-level SWE and tech roles in the US</p>
-        <h1 className="display">Find the role that <em>fits</em>.</h1>
+        <h1 className="display">{title}</h1>
         <p className="sentence">{sentence}{(list.cooled + list.capped) > 0 && <span className="dim"> {list.cooled + list.capped} hidden from companies you&apos;ve applied to or already see twice.</span>}</p>
       </header>
 

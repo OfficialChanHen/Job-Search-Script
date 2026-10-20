@@ -17,7 +17,7 @@ const TIPS = [
   "Keep a STAR story ready for a bug you fixed, a conflict, and something you shipped.",
 ];
 const REDUCED = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-const MODE = { onsite: "🏢 In-person", hybrid: "🔀 Hybrid", remote: "🌐 Remote", "": "" } as const;
+const MODE = { onsite: "In person", hybrid: "Hybrid", remote: "Remote", "": "" } as const;
 
 /** Triage the current tab one job at a time: ← pass, ↑ save, → open and apply. */
 export default function QuickPlay({ rows, status, data, store, solved }:
@@ -76,25 +76,25 @@ function Deck({ initial, data, store, solved, close }: { initial: Job[]; data: J
   const p = j ? data.preps[j.prep] : undefined, co = j?.ck ? data.companies[j.ck] : undefined;
   return (
     <div className="qp" role="dialog" aria-modal="true" aria-label="Quick Play">
-      <div className="qp-top"><span>{j ? `${deck.length - i} left in this view` : ""}</span><span className="qp-combo">{combo >= 3 ? `🔥 combo ×${combo}` : ""}</span><button onClick={close}>✕ Esc</button></div>
+      <div className="qp-top"><span>{j ? `${deck.length - i} left in this view` : ""}</span><span className="qp-combo">{combo >= 3 ? `Combo ×${combo}` : ""}</span><button onClick={close}>✕ Esc</button></div>
       <div className={"qp-card " + fly} ref={card}>
-        {!j ? <div className="empty-deck">🎉 <b>Inbox zero!</b><br /><span className="count-note">You&apos;ve triaged every job in this view. Try another tab or job type.</span></div> : <>
+        {!j ? <div className="empty-deck"><b>Inbox zero!</b><br /><span className="count-note">You&apos;ve triaged every job in this view. Try another tab or job type.</span></div> : <>
           <div className="top">
-            <div><h3>{j.title}</h3><div className="meta"><span className="co">{j.company || "—"}</span><span className="dot">📍</span>{j.location}</div></div>
+            <div><h3>{j.title}</h3><div className="meta"><span className="co">{j.company || "Unknown company"}</span>{j.location && ", " + j.location}</div></div>
             <div className={"score" + (j.score >= 10 ? " hot" : "")}>{j.score}<small>match</small></div>
           </div>
           <div className="badges">
-            {j.direct && j.direct !== j.url && <span className="chip flag-direct">🔗 Company site</span>}
+            {j.direct && j.direct !== j.url && <span className="chip flag-direct">Company site</span>}
             <span className={"chip " + (j.jobType === "Full-time" ? "type-ft" : "type-other")}>{j.jobType || "Type ?"}</span>
             {MODE[j.mode] && <span className="chip flag-src">{MODE[j.mode]}</span>}
             <span className="chip flag-src">{j.catLabel}</span>
-            {j.exp && <span className="chip flag-src">🎓 {j.exp}</span>}
+            {j.exp && <span className="chip flag-src">{j.exp}</span>}
             {j.chips.slice(0, 6).map(c => <span key={c} className="chip">{c}</span>)}
           </div>
           {j.sm && (j.sm.sum || j.sm.do) && <div className="sumline">{(j.sm.sum || "").slice(0, 260)}{j.sm.do && <ul>{j.sm.do.slice(0, 2).map((x, k) => <li key={k}>{x}</li>)}</ul>}</div>}
-          {co?.s && <div className="coline">🏢 {co.s.slice(0, 220)}</div>}
-          {p && <div className="focus"><b>{p.coding ? "🧠 Coding interview likely" : "🗣 Usually no coding round"}</b>. {p.focus}
-            {p.problems.length > 0 && <ol>{p.problems.slice(0, 3).map(([n, name]) => <li key={n}>{solved[n] ? "✅ " : ""}#{n} {name}</li>)}</ol>}</div>}
+          {co?.s && <div className="coline">{co.s.slice(0, 220)}</div>}
+          {p && <div className="focus"><b>{p.coding ? "Coding interview likely" : "Usually no coding round"}</b>. {p.focus}
+            {p.problems.length > 0 && <ol>{p.problems.slice(0, 3).map(([n, name]) => <li key={n}>#{n} {name}{solved[n] ? " (solved)" : ""}</li>)}</ol>}</div>}
         </>}
       </div>
       {j && !confirming && <div className="qp-controls">
@@ -109,7 +109,7 @@ function Deck({ initial, data, store, solved, close }: { initial: Job[]; data: J
         <button className="pass" onClick={() => act("nope")}>✕ Didn&apos;t apply, pass <small>(←)</small></button>
       </div>}
       <div className="qp-hint">Keys: ← pass, ↑ save, → open and apply. After opening: Enter if you applied, ↑ to save, ← to pass. Esc exits. Uses your current tab and filters.</div>
-      <div className="qp-tip">💡 {tip}</div>
+      <div className="qp-tip">{tip}</div>
     </div>
   );
 }

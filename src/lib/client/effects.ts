@@ -24,7 +24,7 @@ export function floatText(text: string, color = "var(--good-mark)", dy = 0) {
   setTimeout(() => el.remove(), 1200);
 }
 export const floatXP = (n: number) => { if (n) floatText((n > 0 ? "+" : "") + n + " XP", n < 0 ? "var(--ink-3)" : undefined); };
-export const floatFood = (h: number) => floatText(`+${h}h 🍖`, "var(--warn)", 22);
+export const floatFood = (h: number) => floatText(`+${h}h food`, "var(--warn)", 22);
 
 const COLORS = ["#2F5D3A", "#A9822F", "#D2AC5A", "#B5482A", "#5E9A6E", "#F2E9D3"];
 type Bit = { x: number; y: number; vx: number; vy: number; r: number; vr: number; w: number; h: number; c: string; life: number };
@@ -53,7 +53,7 @@ export function confetti(n: number) {
   raf = requestAnimationFrame(tick);
 }
 
-export function copyText(text: string, msg = "📋 Copied") {
+export function copyText(text: string, msg = "Copied") {
   const done = () => toast(msg);
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => toast("Copy failed", true));
   else toast("Copy needs a secure (https) page", true);
