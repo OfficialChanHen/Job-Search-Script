@@ -225,10 +225,14 @@ export class VillageScene {
     const border = theme === "blossom" ? "pinktree" : theme === "snow" || zi === 5 ? "snowpine" : theme === "autumn" ? "roundtree" : "pine";   // the town's tree line
     for (let y = 18 * L.S; y < L.H + 30 * L.S; y += 26 * L.S) this.props.push({ id: "prop:" + border, x: L.town + 2 * L.S, y });
     const n = Math.round((L.f1 - L.f0) * (L.H) / (2600 * L.S * L.S));
+    // keep each one clear of the others, so no thicket forms that units can vanish into
+    const clear = (x: number, y: number) => this.props.every(p => p.x < L.f0 || ((x - p.x) / (34 * L.S)) ** 2 + ((y - p.y) / (26 * L.S)) ** 2 >= 1);
     for (let i = 0; i < n; i++) {
-      const edge = rnd() < 0.5;
-      this.props.push({ id: "prop:" + kinds[Math.floor(rnd() * kinds.length)], x: L.f0 + rnd() * (L.f1 - L.f0),
-                        y: edge ? (rnd() < 0.5 ? 14 * L.S + rnd() * 10 * L.S : L.H + 4 * L.S) : 30 * L.S + rnd() * (L.H - 40 * L.S) });
+      for (let tries = 0; tries < 12; tries++) {
+        const edge = rnd() < 0.5, kind = kinds[Math.floor(rnd() * kinds.length)], x = L.f0 + rnd() * (L.f1 - L.f0);
+        const y = edge ? (rnd() < 0.5 ? 14 * L.S + rnd() * 10 * L.S : L.H + 4 * L.S) : 30 * L.S + rnd() * (L.H - 40 * L.S);
+        if (clear(x, y)) { this.props.push({ id: "prop:" + kind, x, y }); break; }
+      }
     }
   }
 
@@ -516,7 +520,8 @@ export class VillageScene {
     // everything that stands on the ground is drawn back to front
     type D = { y: number; draw: () => void };
     const list: D[] = [];
-    this.props.forEach(p => list.push({ y: p.y, draw: () => this.sprite(p.id, p.x, p.y) }));
+    const hide = this.hiders();
+    this.props.forEach(p => list.push({ y: p.y, draw: () => this.sprite(p.id, p.x, p.y, "idle", "down", hide(p.id, p.x, p.y)) }));
     BLD_SLOTS.forEach(b => {
       const p = this.bldPos(b);
       list.push({ y: p.y, draw: () => this.sprite("bld:" + b, p.x, p.y) });
@@ -526,7 +531,8 @@ export class VillageScene {
       const c = cosmetic(id), p = slots[i % Math.max(1, slots.length)];
       if (!c || !p) return;
       const big = c.sprite?.startsWith("bld:");
-      list.push({ y: p.y, draw: () => this.sprite(c.sprite ?? "deco:" + id, p.x, p.y, "idle", "down", 1, big ? 0.6 : 0.85) });
+      const sid = c.sprite ?? "deco:" + id, sc = big ? 0.6 : 0.85;
+      list.push({ y: p.y, draw: () => this.sprite(sid, p.x, p.y, "idle", "down", hide(sid, p.x, p.y, sc), sc) });
     });
     if (inp.daRunning) {
       const m = this.door("market");
@@ -595,6 +601,16 @@ export class VillageScene {
       }
     }
     ctx.restore();
+  }
+  /** How opaque to draw a tree, rock or decoration: see-through while a hunter or monster stands behind it. */
+  private hiders() {
+    const S = this.S, f = this.fight;
+    const feet: Pt[] = f ? f.units.map((_, i) => this.fighterAt(i)) : [...Object.values(this.hs), ...this.mobs.filter(m => !m.dead)];
+    return (id: string, x: number, y: number, scale = 1) => {
+      const sz = actorSize(id), hw = sz.w * S * scale * 0.4, top = y - sz.h * S * scale * 0.9;
+      // a unit is about 16 wide and 20 tall with its health bar; it's hidden if it stands behind (above) the art and overlaps it
+      return feet.some(u => u.y < y && u.y + 2 * S > top && u.y - 20 * S < y && Math.abs(u.x - x) < hw + 7 * S) ? 0.4 : 1;
+    };
   }
   /** A hunter with their armor's rim under their feet and their weapon in hand (it swings on a hit). */
   private drawHunter(k: string, x: number, y: number, anim: string, dir: Dir, swing: boolean, alpha: number, t = this.clock) {
