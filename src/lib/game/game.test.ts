@@ -254,7 +254,7 @@ describe("gold comes only from real work", () => {
 describe("endless progression", () => {
   /* A steady player for 300 days: 3 applications, 2 solves and a review a day, clears quests every
      other day. The village hunts, spends greedily, and fights the next boss when the odds are good.
-     Zones must keep coming at a steady pace: no wall, no runaway. */
+     Zones must keep coming: a start that takes work, no wall later, no runaway. */
   it("keeps unlocking zones at a steady pace for months", () => {
     const store = new Store({ versioned: [NS.village], localOnly: [NS.sheet] });
     const pool = Object.values(topics).flatMap(t => t.problems.map(([n]) => n));
@@ -298,8 +298,9 @@ describe("endless progression", () => {
     const gained = (a: number, b: number) => zoneOn[b] - zoneOn[a];
     if (process.env.SIM_LOG) console.log(zoneOn.filter((_, i) => i % 10 === 9).join(" "), "gold", Math.round(goldNow(v, snapshot(store))), "forge", v.bld.forge, "inn", v.bld.inn, "gear", JSON.stringify(v.gear).slice(0, 200), "party", v.party.length);
     expect(zoneOn[29]).toBeGreaterThanOrEqual(5);              // a good first month
-    expect(gained(100, 199)).toBeGreaterThanOrEqual(8);        // still climbing months later
-    expect(gained(200, 299)).toBeGreaterThanOrEqual(8);        // and later still: no wall
+    expect(zoneOn[29]).toBeLessThanOrEqual(16);                // that still takes real work
+    expect(gained(100, 199)).toBeGreaterThanOrEqual(5);        // still climbing months later
+    expect(gained(200, 299)).toBeGreaterThanOrEqual(4);        // and later still: no wall
     expect(gained(200, 299)).toBeLessThanOrEqual(80);          // but no runaway either
     expect(gained(200, 299)).toBeLessThan(gained(100, 199));   // it slows gently instead
   }, 60_000);

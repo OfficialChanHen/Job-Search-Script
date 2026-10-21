@@ -85,10 +85,11 @@ export const gearOf = (v: VillageState, k: string) => v.gear[k] || { w: 0, a: 0 
 export const rowOf = (v: VillageState, k: string) => v.row[k] || (HUNTERS[k].cls === "guardian" ? "front" : "back");
 export const bldCost = (b: BuildingKey, lv: number) => Math.round(BUILDINGS[b].base * Math.pow(BUILDINGS[b].g, lv - 1));
 /* Gear multiplies (×1.08 a level) and each level costs ×1.12 more. Zone difficulty grows ×1.4 a zone
-   but wages only ×1.3, so keeping up costs about a quarter more real work each zone (about 8× more
-   per lap of 9): endless, slowing steadily, and paced by real work. */
+   and wages ×1.45, so keeping up costs about 13% more real work each zone. That sets the late pace
+   (zones keep coming, more slowly). The base gear price sets the early pace: the first zones take
+   real work too. */
 export const GEAR_STEP = 1.08;
-export const gearCost = (lv: number) => Math.round(10 * Math.pow(1.12, lv));
+export const gearCost = (lv: number) => Math.round(300 * Math.pow(1.12, lv));
 export const gearCap = (v: VillageState) => 8 * v.bld.forge;
 export const rankOf = (c: number) => RANK_AT.filter(a => c >= a).length;
 
@@ -214,7 +215,7 @@ export function zoneDef(z: number) {
 /** What a zone asks of a party, and what it pays an efficient one per hour. */
 export function zoneNeed(z: number) {
   const g = Math.pow(1.4, z - 1);
-  return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.3, z - 1) };
+  return { dps: 25 * g, hp: 350 * g, gph: 24 * Math.pow(1.45, z - 1) };
 }
 export function bossOf(z: number): Boss & { z: number; name: string } {
   const d = zoneDef(z), n = zoneNeed(z);
