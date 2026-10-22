@@ -17,7 +17,7 @@ export const NS = {
   followed: "followed",   // jobId or "u:<url>" → { d, how: "done" | "skip" }
   clear: "clear",         // day → 1: all daily quests finished
   badge: "badge",         // badge id → day unlocked
-  triage: "triage",       // day → jobs triaged in Quick Play that day
+  triage: "triage",       // "day~id" → 1: one job triaged in Quick Play (older rows: day → that day's count)
   meta: "meta",           // misc numbers (lastLevel, legacy counters)
   kitStd: "kitstd",       // form field → your usual answer
   kitJob: "kitjob",       // jobId → { why?, you? } your rewrites
@@ -95,7 +95,7 @@ export function snapshot(store: Store, now: Date = new Date()): Progress {
     clears: obj<1>(NS.clear),
     unlocked: obj<string>(NS.badge),
     triaged: Object.values(triage).reduce((a, n) => a + n, 0) + ((meta("legacyTriaged") as number) || 0),
-    triToday: triage[today] || 0,
+    triToday: Object.entries(triage).reduce((a, [k, n]) => a + (k === today || k.startsWith(today + "~") ? n : 0), 0),
     times: [...(((meta("legacyTimes") as number[]) || [])), ...appliedHours],
     lastLevel: (meta("lastLevel") as number) || 1,
     da: store.entries<DASession>(NS.da),
@@ -145,9 +145,9 @@ export function markFollowed(store: Store, key: string, how: Followed["how"], no
   store.set(NS.followed, key, { d: localDay(now), how });
 }
 
+/** One row per triage, so two devices triaging the same day never overwrite each other's count. */
 export function addTriage(store: Store, now: Date = new Date()) {
-  const d = localDay(now);
-  store.set(NS.triage, d, (store.get<number>(NS.triage, d) || 0) + 1);
+  store.set(NS.triage, `${localDay(now)}~${newId()}`, 1);
 }
 
 export function addDASession(store: Store, s: DASession) { store.set(NS.da, newId(), s); }

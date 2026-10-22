@@ -89,7 +89,7 @@ GLOBAL_REMOTE_SOURCES = {"RemoteOK", "WeWorkRemotely", "Himalayas", "Remotive", 
 # Sources whose listings are full-time unless they say otherwise
 FULLTIME_SOURCES = {"Greenhouse", "Lever", "Ashby", "Workday", "SmartRecruiters",
                     "GitHub/NewGrad", "GitHub/Simplify", "GitHub/speedyapply",
-                    "GitHub/zapplyjobs", "LinkedIn", "USAJobs"}
+                    "GitHub/zapplyjobs", "LinkedIn", "USAJobs", "Google Careers", "YC", "Built In"}
 
 TYPE_SCORE = {"Full-time": 3, "": 1, "Contract": 1, "Part-time": 0, "Temporary": 0}
 

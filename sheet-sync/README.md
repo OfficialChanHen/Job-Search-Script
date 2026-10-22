@@ -62,12 +62,15 @@ column order (File → Import → Append to current sheet).
 
 ---
 
-## Already set this up before? (update to version 4)
+## Already set this up before? (update to version 5)
+
+Version 5 stores a job title or company that starts with `=`, `+`, `-` or `@`
+as plain text, so a posting can never run a formula in your sheet.
 
 1. Paste the new `Code.gs` over the old one and 💾 Save.
 2. **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
    The `/exec` URL stays the same. Opening the URL in a browser should now show
-   `"version":4`.
+   `"version":5`.
 
 ## Notes
 

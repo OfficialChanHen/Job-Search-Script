@@ -132,4 +132,19 @@ describe("sync store", () => {
     expect(b.get("clear", "2026-10-19")).toBe(1);
     expect(seen).toBeGreaterThan(0);
   });
+
+  it("a failed background push shows as a sync error and keeps the change for the next try", async () => {
+    const server = new MemoryServer(), d = device(), ok = server.backend();
+    let down = false;
+    await d.connect({ ...ok, push: async rows => { if (down) throw new Error("network"); return ok.push(rows); } });
+    down = true;
+    d.set("status", "j1", { s: "applied" });
+    await expect(d.flush()).rejects.toThrow("network");
+    expect(d.syncState).toBe("error");
+    expect(d.pendingCount).toBe(1);
+    down = false;
+    await d.sync();
+    expect(d.syncState).toBe("idle");
+    expect(d.pendingCount).toBe(0);
+  });
 });

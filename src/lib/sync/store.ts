@@ -274,6 +274,11 @@ export class Store {
           }
         });
         this.setState("idle");
+      } catch (e) {
+        // the outbox is kept: the next sync (focus, back online, or the 5-minute timer) retries it
+        this.lastError = e instanceof Error ? e.message : String(e);
+        this.setState(typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "error");
+        throw e;
       } finally {
         this.flushing = null;
       }

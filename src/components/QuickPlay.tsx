@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Job, JobData } from "@/lib/data/types";
 import { confetti, floatFood, floatText } from "@/lib/client/effects";
 import { addTriage, setStatus, type StatusEntry } from "@/lib/game/progress";
+import { jobHref } from "@/lib/jobs/sheet";
 import type { Store } from "@/lib/sync/store";
 import { useUi } from "./UiContext";
 
@@ -54,7 +55,7 @@ function Deck({ initial, data, store, solved, close }: { initial: Job[]; data: J
     if (!j || busy.current) return;
     if (a === "pass" || a === "nope") { setStatus(store, j.id, "hidden"); next("left", 0); }
     else if (a === "save" || a === "later") { setStatus(store, j.id, "saved"); next("up", 10); }
-    else if (a === "apply") { window.open(j.direct || j.url, "_blank", "noopener"); setConfirming(true); }
+    else if (a === "apply") { const href = jobHref(j); if (href) window.open(href, "_blank", "noopener"); setConfirming(true); }
     else if (a === "yes") { setStatus(store, j.id, "applied"); floatFood(4); next("right", 50); }
   };
   const actRef = useRef(act);

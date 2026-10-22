@@ -14,6 +14,11 @@
 ║     • Hacker News       ("Who is hiring?" monthly thread)  ║
 ║     • RemoteOK / Remotive / WeWorkRemotely / Jobicy        ║
 ║       (remote boards — US-restricted listings only)        ║
+║     • CareerForce MN    (state job bank, careerforce.mn.gov║
+║     • Workable          (job search across Workable ATS)   ║
+║     • YC                (Work at a Startup, new grads ok)  ║
+║     • Built In          (entry-level tech listings)        ║
+║     • Google Careers    (jobs at Google, early career)     ║
 ║   New-grad lists                                           ║
 ║     • SimplifyJobs      (New-Grad-Positions JSON feed)     ║
 ║     • speedyapply       (2027 SWE College Jobs, USA)       ║
@@ -26,6 +31,7 @@
 ║     • JSearch           (Google for Jobs: Indeed, Glassdoor║
 ║                          ZipRecruiter…)                    ║
 ║     • Adzuna            (aggregator)                       ║
+║     • Google Jobs       (google.com job search, SerpApi)   ║
 ╚════════════════════════════════════════════════════════════╝
 
 Priority: full-time first; then in-person > hybrid > remote.
@@ -33,6 +39,7 @@ Priority: full-time first; then in-person > hybrid > remote.
 
 import csv
 import hashlib
+import html as htmllib
 import json
 import logging
 import os
@@ -47,6 +54,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+from direct_links import is_direct
 from enrich import enrich_rows, is_too_experienced
 from local_parttime import LINKEDIN_QUERIES as LOCAL_QUERIES, MAX_MILES, drive_miles, is_tech_related
 from job_rules import (
@@ -79,6 +87,7 @@ ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "")
 USAJOBS_KEY    = os.getenv("USAJOBS_KEY", "")
 USAJOBS_EMAIL  = os.getenv("USAJOBS_EMAIL", "")
 JSEARCH_KEY    = os.getenv("JSEARCH_KEY", "")     # RapidAPI key
+SERPAPI_KEY    = os.getenv("SERPAPI_KEY", "")     # Google Jobs via SerpApi
 
 # Keyword searches for boards with free-text search. SWE first, then the
 # tech-adjacent roles that are growing for new grads (see README).
@@ -357,6 +366,19 @@ def _age_days(age: str) -> float | None:
         return None
     n, unit = int(m.group(1)), m.group(2)
     return n * {"m": 1 / 1440, "h": 1 / 24, "d": 1, "w": 7, "mo": 30, "y": 365}[unit]
+
+
+_AGO_RE = re.compile(r"\b(\d+|an?)\s+(minute|hour|day|week|month|year)s?\b", re.I)
+
+
+def _ago_days(text: str) -> float | None:
+    """'3 days ago' / 'Posted an hour ago' / 'about 1 month' → days (None if absent)."""
+    m = _AGO_RE.search(text or "")
+    if not m:
+        return None
+    n = 1 if m.group(1).lower() in ("a", "an") else int(m.group(1))
+    unit = m.group(2).lower()
+    return n * {"minute": 1 / 1440, "hour": 1 / 24, "day": 1, "week": 7, "month": 30, "year": 365}[unit]
 
 
 def _epoch_date(ts) -> str:
@@ -1630,6 +1652,383 @@ def fetch_adzuna() -> list[dict]:
     return jobs
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Google for Jobs via SerpApi (requires free key)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_google_jobs() -> list[dict]:
+    """
+    Google's job search (the "Jobs" panel on google.com) through SerpApi —
+    Google only renders it with JavaScript, so it can't be read directly.
+    FREE plan is 100–250 searches/month, so 3 queries/day. Each result lists every
+    site it's posted on; the employer's own page is picked over job boards.
+    https://serpapi.com/google-jobs-api  ·  set SERPAPI_KEY in GitHub secrets.
+    """
+    if not SERPAPI_KEY:
+        log.info("⏭  Google Jobs skipped (no SERPAPI_KEY — see README to add it)")
+        return []
+
+    log.info("🔍 Google Jobs (SerpApi) ...")
+    jobs: list[dict] = []
+    seen_ids: set[str] = set()
+    queries = ["entry level software engineer", "entry level data analyst",
+               "junior software developer Minneapolis"]
+    for q in queries:
+        resp = get("https://serpapi.com/search.json", params={
+            "engine": "google_jobs", "q": q, "location": "United States",
+            "gl": "us", "hl": "en", "api_key": SERPAPI_KEY}, timeout=40)
+        if resp is None:
+            continue
+        try:
+            items = resp.json().get("jobs_results", [])
+        except ValueError:
+            continue
+        for it in items:
+            if it.get("job_id") in seen_ids:
+                continue
+            seen_ids.add(it.get("job_id"))
+            title = it.get("title", "")
+            location = it.get("location", "") or "United States"
+            if not is_target_title(title) or not is_us_location(location, bare_remote_ok=True):
+                continue
+            ext = it.get("detected_extensions") or {}
+            days = _ago_days(ext.get("posted_at", ""))
+            if days is not None and days > 7:
+                continue
+            desc = it.get("description", "")
+            ok, exp = experience_ok(desc)
+            if not ok:
+                continue
+            links = [o.get("link", "") for o in it.get("apply_options") or [] if o.get("link")]
+            url = next((l for l in links if is_direct(l)), links[0] if links else it.get("share_link", ""))
+            jobs.append(entry(
+                source     = f"Google/{it.get('via', '').removeprefix('via ')}".rstrip("/"),
+                title      = title,
+                company    = it.get("company_name", ""),
+                location   = location,
+                url        = url,
+                posted     = TODAY if days is None else (NOW - timedelta(days=days)).strftime("%Y-%m-%d"),
+                work_mode  = "remote" if ext.get("work_from_home") else "",
+                job_type   = infer_job_type(ext.get("schedule_type", ""), title, desc),
+                experience = exp,
+                desc       = desc,
+            ))
+        time.sleep(1.0)
+
+    log.info(f"  ✓ Google Jobs → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Google Careers (jobs at Google itself — early-career filter)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_google_careers() -> list[dict]:
+    """
+    google.com/about/careers search results, US + "Early" level. The page
+    embeds each result's full posting as JSON (AF_initDataCallback 'ds:1'):
+      [id, title, _, [_, responsibilities], [_, qualifications], _, _, company,
+       _, [[location, …]], [_, about], _, [created_epoch, ns], …]
+    Every early-career posting is read, so it doubles as a live snapshot —
+    but only when every page was read: a partial list would mark the rest closed.
+    """
+    log.info("🔍 Google Careers ...")
+    jobs: list[dict] = []
+    live: list[tuple[str, str]] = []
+    complete = False
+    base = "https://www.google.com/about/careers/applications/jobs/results"
+    for page in range(1, 16):
+        resp = get(base, params={"location": "United States", "target_level": "EARLY", "page": page}, timeout=40)
+        if resp is None:
+            break
+        m = re.search(r"AF_initDataCallback\(\{key: 'ds:1'.*?data:(.*?), sideChannel: \{\}\}\);", resp.text, re.S)
+        try:
+            items = (json.loads(m.group(1))[0] or []) if m else None
+        except (ValueError, IndexError, TypeError):
+            items = None
+        if items is None:
+            break                   # page layout changed: don't trust what we have
+        if not items:
+            complete = True
+            break
+        for it in items:
+            try:
+                jid, title, company = it[0], it[1], it[7] or "Google"
+                locs = [l[0] for l in it[9] or [] if l and l[0]]
+                desc = "".join(f"<h3>{h}</h3>{(it[i] or [None, ''])[1] or ''}"
+                               for i, h in ((10, "About the job"), (3, "Responsibilities"), (4, "Qualifications")))
+                created = (it[12] or [0])[0]
+            except (IndexError, TypeError):
+                continue
+            url = f"{base}/{jid}-{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')}"
+            live.append((company, url))
+            us_locs = [l for l in locs if is_us_location(l, bare_remote_ok=True)]
+            if not us_locs or not is_target_title(title):
+                continue
+            ok, exp = experience_ok(html_to_text(desc))
+            if not ok:
+                continue
+            location = "; ".join(us_locs[:3]) + (f" +{len(us_locs) - 3}" if len(us_locs) > 3 else "")
+            jobs.append(entry(
+                source     = "Google Careers",
+                title      = title,
+                company    = company,
+                location   = location,
+                url        = url,
+                posted     = _epoch_date(created),
+                job_type   = infer_job_type("", title, default="Full-time"),
+                experience = exp or "Early career",
+                desc       = desc,
+            ))
+        time.sleep(0.8)
+
+    if complete:
+        for company, url in live:
+            mark_live("Google Careers", company, url)
+    else:
+        log.info("    Google Careers list not fully read — keeping the older live snapshot")
+    log.info(f"  ✓ Google Careers → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: CareerForce MN (Minnesota's state job bank — careerforce.mn.gov)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_careerforce() -> list[dict]:
+    """
+    CareerForce's job search (fed by the National Labor Exchange, so it also
+    carries State of Minnesota and small local employers). Server-rendered
+    cards, 10 per page, newest first. The card only has a teaser, so the full
+    posting is read by enrich.py from the ?jvid= page.
+    """
+    log.info("🔍 CareerForce MN ...")
+    jobs: list[dict] = []
+    seen_ids: set[str] = set()
+    queries = ["software", "developer", "data analyst", "programmer", "IT support",
+               "web developer", "data engineer"]
+    for q in queries:
+        for page in range(5):
+            resp = get("https://careerforce.mn.gov/job-search",
+                       params={"title": q, "sort": "date-posted-desc", "page": page})
+            if resp is None:
+                break
+            soup = BeautifulSoup(resp.text, "html.parser")
+            cards = soup.select("div.job-search-result[data-jvid]")
+            too_old = False
+            for card in cards:
+                jvid = str(card["data-jvid"])
+                h3 = card.find("h3")
+                meta = card.select_one("div.tw-font-semibold")
+                spans = [s.get_text(" ", strip=True) for s in meta.find_all("span", recursive=False)] if meta else []
+                posted = re.search(r"Posted\s+(.{1,20}?)\s+ago", card.get_text(" ", strip=True))
+                days = _ago_days(posted.group(1) if posted else "") or 0
+                if days > 7:
+                    too_old = True
+                    continue
+                if not h3 or jvid in seen_ids:
+                    continue
+                seen_ids.add(jvid)
+                title = h3.get_text(" ", strip=True)
+                if not is_target_title(title):
+                    continue
+                summary = card.select_one(".job-description__summary")
+                ok, exp = experience_ok(summary.get_text(" ", strip=True) if summary else "")
+                if not ok:
+                    continue
+                location = spans[1] if len(spans) > 1 else "MN"
+                jobs.append(entry(
+                    source     = "CareerForce MN",
+                    title      = title,
+                    company    = spans[0] if spans else "",
+                    location   = location,
+                    url        = f"https://careerforce.mn.gov/job-search?jvid={jvid}",
+                    posted     = (NOW - timedelta(days=days)).strftime("%Y-%m-%d"),
+                    job_type   = infer_job_type("", title),
+                    experience = exp,
+                ))
+            time.sleep(1.0)
+            if too_old or len(cards) < 10:
+                break
+
+    log.info(f"  ✓ CareerForce MN → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Workable job search (every company on the Workable ATS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_workable_search() -> list[dict]:
+    """
+    jobs.workable.com's public search API — free, no key. Covers thousands of
+    small and mid-size companies that host their careers page on Workable.
+    Past 24h, US; full description included.
+    """
+    log.info("🔍 Workable ...")
+    jobs: list[dict] = []
+    seen_urls: set[str] = set()
+    for q in SEARCH_TERMS:
+        token = ""
+        for _ in range(3):
+            params = {"query": q, "location": "United States", "day_range": 1}
+            if token:
+                params["pageToken"] = token
+            resp = get("https://jobs.workable.com/api/v1/jobs", params=params)
+            if resp is None:
+                break
+            try:
+                data = resp.json()
+            except ValueError:
+                break
+            for it in data.get("jobs", []):
+                url, title = it.get("url", ""), it.get("title", "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                loc = it.get("location") or {}
+                location = ", ".join(x for x in (loc.get("city"), loc.get("subregion"), loc.get("countryName")) if x)
+                if (loc.get("countryName") or "United States") != "United States" or not is_target_title(title):
+                    continue
+                jt = infer_job_type(it.get("employmentType", ""), title, default="Full-time")
+                if jt == "Internship":
+                    continue
+                desc = "".join(f"<h3>{h}</h3>{it.get(k) or ''}" if h else (it.get(k) or "")
+                               for k, h in (("description", ""), ("requirementsSection", "Requirements"),
+                                            ("benefitsSection", "Benefits")))
+                ok, exp = _keep_company_role(title, location or "United States", html_to_text(desc))
+                if not ok:
+                    continue
+                jobs.append(entry(
+                    source     = "Workable",
+                    title      = title,
+                    company    = (it.get("company") or {}).get("title", ""),
+                    location   = location or "United States",
+                    url        = url,
+                    posted     = (it.get("created") or "")[:10],
+                    tags       = it.get("department") or "",
+                    work_mode  = classify_work_mode(location, (it.get("workplace") or "").replace("_", "")),
+                    job_type   = jt,
+                    experience = exp,
+                    desc       = desc,
+                ))
+            token = data.get("nextPageToken") or ""
+            if not token or len(data.get("jobs", [])) < 20:
+                break
+            time.sleep(0.4)
+
+    log.info(f"  ✓ Workable → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Y Combinator "Work at a Startup" (ycombinator.com/jobs)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_yc_jobs() -> list[dict]:
+    """
+    YC startups' job listings. Each role page embeds its postings as JSON
+    (Inertia data-page) with a minExperience field — only "Any (new grads ok)"
+    and "1+ years" are kept, posted in the last 30 days.
+    """
+    log.info("🔍 YC Work at a Startup ...")
+    jobs: list[dict] = []
+    seen_ids: set = set()
+    paths = ["software-engineer", "support"] + [f"software-engineer/{c}" for c in
+             ("san-francisco", "new-york", "los-angeles", "seattle", "austin", "chicago")]
+    for path in paths:
+        resp = get(f"https://www.ycombinator.com/jobs/role/{path}")
+        if resp is None:
+            continue
+        m = re.search(r'data-page="([^"]*)"', resp.text)
+        try:
+            items = json.loads(htmllib.unescape(m.group(1)))["props"]["jobPostings"] if m else []
+        except (ValueError, KeyError):
+            continue
+        for it in items:
+            if it.get("id") in seen_ids:
+                continue
+            seen_ids.add(it.get("id"))
+            title, location = it.get("title", ""), it.get("location", "")
+            if it.get("minExperience") not in ("Any (new grads ok)", "1+ years"):
+                continue
+            days = _ago_days(it.get("createdAt") or "")      # "9 days", "about 1 month"
+            if days is None or days > 30:
+                continue
+            jt = infer_job_type(it.get("type", ""), title, default="Full-time")
+            if jt == "Internship" or not is_target_title(title):
+                continue
+            if not is_us_location(location.replace("US;", "US,"), bare_remote_ok=True):
+                continue
+            jobs.append(entry(
+                source     = "YC",
+                title      = title,
+                company    = it.get("companyName", ""),
+                location   = location,
+                url        = "https://www.ycombinator.com" + (it.get("url") or ""),
+                posted     = (NOW - timedelta(days=days)).strftime("%Y-%m-%d"),
+                tags       = "; ".join(x for x in (it.get("companyBatchName"), it.get("salaryRange"),
+                                                   it.get("companyOneLiner")) if x),
+                job_type   = jt,
+                experience = "New grad" if it.get("minExperience", "").startswith("Any") else "1+ years",
+            ))
+        time.sleep(0.8)
+
+    log.info(f"  ✓ YC → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SOURCE: Built In (tech job board — entry-level filter)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_builtin() -> list[dict]:
+    """
+    builtin.com entry-level listings updated in the past day. Server-rendered
+    cards; the job pages carry schema.org JSON-LD, which enrich.py reads.
+    """
+    log.info("🔍 Built In ...")
+    jobs: list[dict] = []
+    seen_urls: set[str] = set()
+    icon_text = lambda card, icon: next((i.find_parent("div").find_next_sibling().get_text(" ", strip=True)
+                                         for i in card.select(f"i.{icon}")
+                                         if i.find_parent("div") and i.find_parent("div").find_next_sibling()), "")
+    for cat in ("dev-engineering", "data-analytics", "it", "customer-success"):
+        for page in range(1, 6):
+            resp = get(f"https://builtin.com/jobs/entry-level/{cat}",
+                       params={"daysSinceUpdated": 1, "country": "USA", "allLocations": "true", "page": page})
+            if resp is None:
+                break
+            soup = BeautifulSoup(resp.text, "html.parser")
+            cards = soup.select('[data-id="job-card"]')
+            for card in cards:
+                a = card.select_one('a[data-id="job-card-title"]')
+                co = card.select_one('[data-id="company-title"]')
+                if not a:
+                    continue
+                url = "https://builtin.com" + str(a.get("href", "")).split("?")[0]
+                title = a.get_text(" ", strip=True)
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                location = icon_text(card, "fa-location-dot")
+                if not is_target_title(title) or not is_us_location(location or "USA", bare_remote_ok=True):
+                    continue
+                mode = icon_text(card, "fa-house-building").lower()
+                jobs.append(entry(
+                    source     = "Built In",
+                    title      = title,
+                    company    = co.get_text(" ", strip=True) if co else "",
+                    location   = location or "USA",
+                    url        = url,
+                    posted     = TODAY,
+                    tags       = icon_text(card, "fa-sack-dollar"),
+                    work_mode  = classify_work_mode(location, "onsite" if "office" in mode else mode),
+                    job_type   = infer_job_type("", title, default="Full-time"),
+                    experience = "Entry-level",
+                ))
+            if len(cards) < 10:
+                break
+            time.sleep(0.8)
+
+    log.info(f"  ✓ Built In → {len(jobs)} relevant jobs")
+    return jobs
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  OUTPUT
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1693,6 +2092,12 @@ FETCHERS = [
     fetch_workday_boards,
     fetch_usajobs,
     fetch_jsearch,
+    fetch_google_jobs,
+    fetch_google_careers,
+    fetch_careerforce,
+    fetch_workable_search,
+    fetch_yc_jobs,
+    fetch_builtin,
     fetch_adzuna,
     fetch_remoteok,
     fetch_remotive,
@@ -1725,9 +2130,12 @@ def main() -> None:
     log.info(f"Total raw entries across all sources: {len(all_raw)}")
 
     # ── Final guard: every source must satisfy the same rules ──────────────
+    # (links come from third-party lists too: anything but http(s) is dropped,
+    #  so a "javascript:" link can never reach the dashboard)
     all_raw = [r for r in all_raw
-               if r.get("type") == "parttime"          # local part-time: its own rules
-               or (r.get("job_type") != "Internship" and is_target_title(r["title"]))]
+               if r.get("url", "").lower().startswith(("https://", "http://"))
+               and (r.get("type") == "parttime"          # local part-time: its own rules
+                    or (r.get("job_type") != "Internship" and is_target_title(r["title"])))]
 
     # ── Deduplicate against seen + within today's batch ────────────────────
     new_rows:   list[dict] = []

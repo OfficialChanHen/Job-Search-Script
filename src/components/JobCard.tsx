@@ -3,7 +3,7 @@ import { memo, useState } from "react";
 import type { Company, Job, Prep } from "@/lib/data/types";
 import { floatFood, floatXP, toast } from "@/lib/client/effects";
 import { NS, setStatus, toggleSolved, type JobStatus, type KitJob, type ResumeEntry, type SheetRow, type StatusEntry } from "@/lib/game/progress";
-import { copySheetRow, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
+import { copySheetRow, jobHref, pushToSheet, sheetRow } from "@/lib/jobs/sheet";
 import type { Store } from "@/lib/sync/store";
 import { FitBox, FitChip, KitPanel, RefPanel } from "./CardPanels";
 
@@ -94,7 +94,7 @@ function JobCard({ job: j, prep, company, status, solved, sheetRow: sheet, lates
   };
   const copyRow = () => copySheetRow(sheetRow(j, s === "saved" ? "Saved" : "Applied").map(String))
     .then(() => toast("Copied. Paste it into a blank row of your sheet."), () => toast("Couldn't copy", true));
-  const warn = warning(j), href = j.direct || j.url;
+  const warn = warning(j), href = jobHref(j) || undefined;
   const tabs: [Tab, string][] = [["about", "About"], ["prep", prep?.coding ? "LeetCode" : "Prep"], ["kit", "Apply kit"], ["ref", outreach ? "Referral ✓" : "Referral"]];
   return (
     <article className={"job" + (s ? " " + s : "") + (j.closed ? " closed" : "")}>

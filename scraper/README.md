@@ -50,47 +50,85 @@ Older jobs are re-checked a few hundred per day.
 
 ---
 
-## 📦 What it scrapes
+## 📦 Job boards it searches
 
-| Source | Type | Key Required? |
+25 sources in all. 21 run every day with nothing to set up. The other 4 stay off until you add a free API key.
+
+### On by default (no setup)
+
+| Source | What it searches | Name for a single run |
 |---|---|---|
-| **LinkedIn** | Public job search — entry-level, full-time, last 24h | ❌ Free |
-| **Dice** | Tech recruiting board — full-time, posted today | ❌ Free |
-| **Himalayas** | US + entry-level search API | ❌ Free |
-| **Hacker News** | Monthly "Who is hiring?" posts mentioning junior/new grad | ❌ Free |
-| **SimplifyJobs** | New-Grad-Positions JSON feed (last 3 weeks) | ❌ Free |
-| **speedyapply / zapplyjobs** | 2027 new-grad lists (USA) | ❌ Free |
-| **Greenhouse** | ~60 company boards (Stripe, SpaceX, Datadog, Jamf, Jane Street, …) | ❌ Free |
-| **Ashby** | ~26 boards (OpenAI, Ramp, Plaid, Snowflake, Cursor, …) | ❌ Free |
-| **Lever** | Palantir, Zoox | ❌ Free |
-| **SmartRecruiters** | ServiceNow, AbbVie | ❌ Free |
-| **Workday** | Large employers (Target, U.S. Bank, Medtronic, 3M, General Mills, Thomson Reuters, C.H. Robinson, Securian, Ameriprise, Xcel, …) + Capital One, Nvidia, Salesforce, Visa, … | ❌ Free |
-| **RemoteOK / Remotive / WeWorkRemotely / Jobicy** | Remote boards — only US-restricted listings kept | ❌ Free |
-| **USAJobs** | Federal IT/CS/data jobs, GS-5–9, incl. Pathways Recent Graduates | ✅ Free signup |
-| **JSearch** | Google for Jobs → Indeed, Glassdoor, ZipRecruiter, … | ✅ Free RapidAPI tier |
-| **Adzuna** | Large job aggregator | ✅ Free signup |
+| **LinkedIn** | Public job search: entry-level, full-time, last 24h | `linkedin` |
+| **Local part-time** | Part-time jobs at tech-related employers within ~45 miles of Shakopee (LinkedIn, plus Adzuna once its key is set). Shown on their own tab | `local_parttime` |
+| **Dice** | Tech recruiting board: full-time, posted today | `dice` |
+| **Himalayas** | US + entry-level search API | `himalayas` |
+| **Hacker News** | Monthly "Who is hiring?" posts mentioning junior/new grad | `hn_hiring` |
+| **SimplifyJobs** | New-Grad-Positions JSON feed (last 3 weeks) | `simplify` |
+| **speedyapply / zapplyjobs** | 2027 new-grad lists (USA) | `markdown_newgrad` |
+| **Greenhouse** | ~60 company boards (Stripe, SpaceX, Datadog, Jamf, Jane Street, …) | `greenhouse` |
+| **Ashby** | ~26 boards (OpenAI, Ramp, Plaid, Snowflake, Cursor, …) | `ashby` |
+| **Lever** | Palantir, Zoox | `lever` |
+| **SmartRecruiters** | ServiceNow, AbbVie | `smartrecruiters` |
+| **Workday** | Large employers (Target, U.S. Bank, Medtronic, 3M, General Mills, Thomson Reuters, C.H. Robinson, Securian, Ameriprise, Xcel, …) + Capital One, Nvidia, Salesforce, Visa, … | `workday` |
+| **CareerForce MN** | Minnesota's state job bank (careerforce.mn.gov), posted in the last week. The full posting is read for years | `careerforce` |
+| **Google Careers** | Jobs at Google itself, US + "Early" level | `google_careers` |
+| **Workable** | Job search across every company on the Workable ATS, past 24h, US | `workable` |
+| **YC Work at a Startup** | YC startups, "new grads ok" or "1+ years", last 30 days | `yc` |
+| **Built In** | Entry-level tech, data and IT listings, updated in the past day | `builtin` |
+| **RemoteOK / Remotive / WeWorkRemotely / Jobicy** | Remote boards. Only US-restricted listings are kept | `remoteok`, `remotive`, `weworkremotely`, `jobicy` |
 
-Not scraped (need a login — check them by hand): **Handshake** (the most important
-one for new grads), Wellfound, YC Work at a Startup, Built In.
-Indeed is covered indirectly through JSearch once its key is added.
+### Off until you add a key
+
+Each of these is skipped (the log shows a `⏭ … skipped` line) until its secret is set. All four have a
+free tier.
+
+| Source | What it searches | Secret(s) to add | How to get the key |
+|---|---|---|---|
+| **USAJobs** | Federal IT/CS/data jobs, GS-5–9, incl. Pathways Recent Graduates | `USAJOBS_KEY`, `USAJOBS_EMAIL` | Request one at [developer.usajobs.gov/apirequest](https://developer.usajobs.gov/apirequest/). The key arrives by email. `USAJOBS_EMAIL` is the address you signed up with |
+| **Google Jobs** | google.com's job search through SerpApi. Picks the employer's own link | `SERPAPI_KEY` | [serpapi.com](https://serpapi.com/) → free plan → Dashboard → API key. Uses 3 searches a day |
+| **JSearch** | Google for Jobs → Indeed, Glassdoor, ZipRecruiter, … | `JSEARCH_KEY` | [rapidapi.com → JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) → subscribe to the free plan → copy `X-RapidAPI-Key`. Free tier is about 200 requests a month, and the scraper uses 5 a day |
+| **Adzuna** | Large job aggregator (also feeds local part-time) | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Sign up at [developer.adzuna.com](https://developer.adzuna.com/). Both values are on your dashboard |
+
+You're eligible for **Pathways Recent Graduates** for 2 years after your degree
+(until about mid-2027).
+
+### Turning sources on
+
+**On GitHub (the daily run):**
+
+1. Repo → **Settings → Secrets and variables → Actions → New repository secret**.
+2. Add each secret from the table above, with the exact name shown.
+3. Actions → "Daily Job Hunt" → **Run workflow** to try it now, or wait for the 8 AM run.
+4. Open that day's log in `scraper/logs/` and check the source says how many jobs it found instead of "skipped".
+
+The workflow already passes all six secrets to the scraper (`.github/workflows/daily_jobs.yml`), so adding the
+secret is the only step.
+
+**On your computer:** set the same names as environment variables before running, e.g.
+
+```bash
+export SERPAPI_KEY=...            # add the ones you have
+python scraper/job_hunter.py google_jobs
+```
+
+**Turning one off:** remove it from the `FETCHERS` list at the bottom of `job_hunter.py` (for the 4 keyed
+sources, deleting the secret also works). To run only some sources for one run, pass their names from the tables
+above: `python scraper/job_hunter.py dice builtin`.
+
+### Not searched
+
+These need a login or block scripts, so check them by hand: **Handshake** (the most important one for new
+grads), Wellfound, Indeed, ZipRecruiter, the State of MN careers site (its postings show up in CareerForce).
+Indeed is covered indirectly through JSearch and Google Jobs once their keys are added.
 
 ---
 
 ## 🚀 Setup
 
-### 1. Optional free API keys (unlock 3 more sources)
+### 1. Optional free API keys
 
-Repo → **Settings → Secrets and variables → Actions → New repository secret**
-
-| Secret Name | Where to get it |
-|---|---|
-| `USAJOBS_KEY` | [developer.usajobs.gov/apirequest](https://developer.usajobs.gov/apirequest/) |
-| `USAJOBS_EMAIL` | The email you registered the USAJobs key with |
-| `JSEARCH_KEY` | [rapidapi.com → JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) → subscribe to the free plan → copy `X-RapidAPI-Key` (free tier ≈ 200 req/month; the scraper uses 5/day) |
-| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | [developer.adzuna.com](https://developer.adzuna.com/) |
-
-You're eligible for **Pathways Recent Graduates** for 2 years after your degree
-(until about mid-2027).
+See [Off until you add a key](#off-until-you-add-a-key) above to turn on USAJobs, Google Jobs, JSearch and
+Adzuna.
 
 **Morning digest** — add the secret(s) for whichever channel you want (any combination works):
 

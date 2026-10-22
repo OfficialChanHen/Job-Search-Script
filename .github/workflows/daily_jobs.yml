@@ -50,6 +50,8 @@ jobs:
           # Indeed / Glassdoor / ZipRecruiter via Google for Jobs — free RapidAPI key
           # https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
           JSEARCH_KEY:    ${{ secrets.JSEARCH_KEY }}
+          # Google Jobs (google.com's job search) — free key at https://serpapi.com/
+          SERPAPI_KEY:    ${{ secrets.SERPAPI_KEY }}
         run: python scraper/job_hunter.py
 
       # ── 4b. Read older postings in the background (summaries, years, company) ──
@@ -93,6 +95,8 @@ jobs:
           else
             DATE=$(date -u +%Y-%m-%d)
             git commit -m "chore: job hunt results for ${DATE} [skip ci]"
+            # the run takes up to an hour: if something was pushed meanwhile, land on top of it
+            git pull --rebase
             git push
           fi
 
