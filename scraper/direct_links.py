@@ -38,12 +38,13 @@ SIMPLIFY_JSON = ("https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positi
 
 # Sources whose links already point at the employer's own posting
 DIRECT_SOURCES = {"Greenhouse", "Lever", "Ashby", "Workday", "SmartRecruiters", "USAJobs",
-                  "GitHub/Simplify", "GitHub/NewGrad", "GitHub/speedyapply"}
+                  "GitHub/Simplify", "GitHub/NewGrad", "GitHub/speedyapply", "Google Careers", "Workable"}
 # Hosts that are job boards / aggregators, not the employer
 AGGREGATOR_HOSTS = re.compile(
     r"linkedin\.com|dice\.com|adzuna\.|jobicy\.com|himalayas\.app|remoteok\.|remotive\.|weworkremotely\.|"
     r"indeed\.|glassdoor\.|ziprecruiter\.|zapply\.jobs|news\.ycombinator\.com|simplify\.jobs|jooble|talent\.com|"
-    r"careerbuilder|monster\.com|builtin\.com|wellfound|lensa\.com|jobright|handshake", re.I)
+    r"careerbuilder|monster\.com|builtin\.com|wellfound|lensa\.com|jobright|handshake|careerforce\.mn\.gov|"
+    r"usnlx\.com|jobsyn\.org|ycombinator\.com|workatastartup\.com|serpapi\.com", re.I)
 
 _SUFFIX = re.compile(r"\b(inc|llc|l\.l\.c|ltd|corp|corporation|co|company|group|holdings|plc|usa|us|the|"
                      r"technologies|technology|labs|systems|solutions|software|services|international)\b\.?", re.I)

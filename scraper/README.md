@@ -66,19 +66,26 @@ Older jobs are re-checked a few hundred per day.
 | **SmartRecruiters** | ServiceNow, AbbVie | ❌ Free |
 | **Workday** | Large employers (Target, U.S. Bank, Medtronic, 3M, General Mills, Thomson Reuters, C.H. Robinson, Securian, Ameriprise, Xcel, …) + Capital One, Nvidia, Salesforce, Visa, … | ❌ Free |
 | **RemoteOK / Remotive / WeWorkRemotely / Jobicy** | Remote boards — only US-restricted listings kept | ❌ Free |
+| **CareerForce MN** | Minnesota's state job bank (careerforce.mn.gov) — posted in the last week, full posting read for years | ❌ Free |
+| **Google Careers** | Jobs at Google itself, US + "Early" level | ❌ Free |
+| **Workable** | Job search across every company on the Workable ATS — past 24h, US | ❌ Free |
+| **YC Work at a Startup** | YC startups, "new grads ok" or "1+ years", last 30 days | ❌ Free |
+| **Built In** | Entry-level tech / data / IT listings, updated in the past day | ❌ Free |
 | **USAJobs** | Federal IT/CS/data jobs, GS-5–9, incl. Pathways Recent Graduates | ✅ Free signup |
+| **Google Jobs** | google.com's job search (via SerpApi) — picks the employer's own link | ✅ Free SerpApi tier |
 | **JSearch** | Google for Jobs → Indeed, Glassdoor, ZipRecruiter, … | ✅ Free RapidAPI tier |
 | **Adzuna** | Large job aggregator | ✅ Free signup |
 
-Not scraped (need a login — check them by hand): **Handshake** (the most important
-one for new grads), Wellfound, YC Work at a Startup, Built In.
-Indeed is covered indirectly through JSearch once its key is added.
+Not scraped (need a login or block scripts — check them by hand): **Handshake** (the most
+important one for new grads), Wellfound, Indeed, ZipRecruiter, the State of MN careers site
+(its postings show up in CareerForce). Indeed is covered indirectly through JSearch / Google Jobs
+once a key is added.
 
 ---
 
 ## 🚀 Setup
 
-### 1. Optional free API keys (unlock 3 more sources)
+### 1. Optional free API keys (unlock 4 more sources)
 
 Repo → **Settings → Secrets and variables → Actions → New repository secret**
 
@@ -88,6 +95,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | `USAJOBS_EMAIL` | The email you registered the USAJobs key with |
 | `JSEARCH_KEY` | [rapidapi.com → JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) → subscribe to the free plan → copy `X-RapidAPI-Key` (free tier ≈ 200 req/month; the scraper uses 5/day) |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | [developer.adzuna.com](https://developer.adzuna.com/) |
+| `SERPAPI_KEY` | [serpapi.com](https://serpapi.com/) → free plan → Dashboard → API key (the scraper uses 3 searches/day) |
 
 You're eligible for **Pathways Recent Graduates** for 2 years after your degree
 (until about mid-2027).

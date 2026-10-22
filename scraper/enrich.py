@@ -296,6 +296,22 @@ def fetch_adzuna(url: str) -> dict | None:
     return {"st": "ok" if body else "none", "desc": str(body) if body else ""}
 
 
+def fetch_careerforce(url: str) -> dict | None:
+    """CareerForce MN job page (?jvid=…): the full posting is server-rendered;
+    a removed posting comes back as an empty result list."""
+    m = re.search(r"careerforce\.mn\.gov/job-search\?jvid=([0-9a-f]+)", url)
+    if not m:
+        return None
+    r = _get(url)
+    if r is None or r.status_code >= 400:
+        return {"st": "retry"}
+    soup = BeautifulSoup(r.text, "html.parser")
+    if not soup.select_one(f'div.job-search-result[data-jvid="{m.group(1)}"]'):
+        return {"st": "gone"}
+    body = soup.select_one(".job-description__full")
+    return {"st": "ok" if body else "none", "desc": str(body) if body else ""}
+
+
 def fetch_generic(url: str) -> dict:
     """Any other page: schema.org JobPosting JSON-LD (Workday, Dice, Eightfold,
     JazzHR, many career sites) — else nothing."""
@@ -335,7 +351,7 @@ def fetch_posting(url: str) -> dict:
     if "icims.com" in host:
         return {"st": "none"}               # blocks automated requests
     for fn in (fetch_workday, fetch_greenhouse, fetch_lever, fetch_ashby, fetch_smartrecruiters,
-               fetch_oracle, fetch_workable, fetch_adzuna):
+               fetch_oracle, fetch_workable, fetch_adzuna, fetch_careerforce):
         got = fn(url)
         if got:
             return got

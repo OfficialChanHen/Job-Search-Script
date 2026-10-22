@@ -9,6 +9,7 @@ export function sheetToday(d = new Date()) {
 const BOARDS: [RegExp, string][] = [
   [/linkedin\./, "LinkedIn"], [/indeed\./, "Indeed"], [/adzuna\./, "Adzuna"], [/dice\.com/, "Dice"], [/himalayas\./, "Himalayas"],
   [/handshake/, "Handshake"], [/simplify\.jobs/, "Simplify"], [/ziprecruiter\./, "ZipRecruiter"], [/jobicy\./, "Jobicy"], [/usajobs\./, "USAJobs"],
+  [/careerforce\.mn\.gov/, "CareerForce MN"], [/builtin\.com/, "Built In"], [/ycombinator\.com/, "YC Work at a Startup"],
 ];
 export function applicationOf(j: Pick<Job, "url" | "direct">) {
   const href = (j.direct || j.url || "").toLowerCase();
