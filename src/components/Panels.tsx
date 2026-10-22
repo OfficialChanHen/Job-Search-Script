@@ -92,6 +92,7 @@ function Tools() {
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = "tracked_jobs.csv";
     a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 0);
   };
   const importFile = async (f: File) => {
     try {

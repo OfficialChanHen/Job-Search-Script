@@ -17,7 +17,7 @@ can feed. Progress syncs between your phone and computer.
 | `src/lib/sync/` | The offline-first store that syncs to Supabase, and the importer for old backups |
 | `public/data/` | Job data written by the scraper every morning. Don't edit by hand |
 | `supabase/migrations/` | The database table and the function that writes to it |
-| `scraper/` | The Python pipeline: scraping, reading postings, scoring, the morning digest ([README](scraper/README.md)) |
+| `scraper/` | The Python pipeline: scraping, reading postings, scoring, the morning digest. Its [README](scraper/README.md#-job-boards-it-searches) lists every job board it searches and how to turn on the ones that need a key |
 | `sheet-sync/` | The Google Apps Script that adds Applied jobs to your tracker sheet |
 | `legacy/` | The old single-page dashboard, kept for reference while features move over ([README](legacy/README.md)) |
 | `docs/` | The old GitHub Pages address, now a "moved" page with a progress backup button |

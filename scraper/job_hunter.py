@@ -1727,10 +1727,13 @@ def fetch_google_careers() -> list[dict]:
     embeds each result's full posting as JSON (AF_initDataCallback 'ds:1'):
       [id, title, _, [_, responsibilities], [_, qualifications], _, _, company,
        _, [[location, …]], [_, about], _, [created_epoch, ns], …]
-    Every early-career posting is read, so it doubles as a live snapshot.
+    Every early-career posting is read, so it doubles as a live snapshot —
+    but only when every page was read: a partial list would mark the rest closed.
     """
     log.info("🔍 Google Careers ...")
     jobs: list[dict] = []
+    live: list[tuple[str, str]] = []
+    complete = False
     base = "https://www.google.com/about/careers/applications/jobs/results"
     for page in range(1, 16):
         resp = get(base, params={"location": "United States", "target_level": "EARLY", "page": page}, timeout=40)
@@ -1738,10 +1741,13 @@ def fetch_google_careers() -> list[dict]:
             break
         m = re.search(r"AF_initDataCallback\(\{key: 'ds:1'.*?data:(.*?), sideChannel: \{\}\}\);", resp.text, re.S)
         try:
-            items = (json.loads(m.group(1))[0] or []) if m else []
-        except (ValueError, IndexError):
-            items = []
+            items = (json.loads(m.group(1))[0] or []) if m else None
+        except (ValueError, IndexError, TypeError):
+            items = None
+        if items is None:
+            break                   # page layout changed: don't trust what we have
         if not items:
+            complete = True
             break
         for it in items:
             try:
@@ -1753,7 +1759,7 @@ def fetch_google_careers() -> list[dict]:
             except (IndexError, TypeError):
                 continue
             url = f"{base}/{jid}-{re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')}"
-            mark_live("Google Careers", company, url)
+            live.append((company, url))
             us_locs = [l for l in locs if is_us_location(l, bare_remote_ok=True)]
             if not us_locs or not is_target_title(title):
                 continue
@@ -1774,6 +1780,11 @@ def fetch_google_careers() -> list[dict]:
             ))
         time.sleep(0.8)
 
+    if complete:
+        for company, url in live:
+            mark_live("Google Careers", company, url)
+    else:
+        log.info("    Google Careers list not fully read — keeping the older live snapshot")
     log.info(f"  ✓ Google Careers → {len(jobs)} relevant jobs")
     return jobs
 
@@ -2119,9 +2130,12 @@ def main() -> None:
     log.info(f"Total raw entries across all sources: {len(all_raw)}")
 
     # ── Final guard: every source must satisfy the same rules ──────────────
+    # (links come from third-party lists too: anything but http(s) is dropped,
+    #  so a "javascript:" link can never reach the dashboard)
     all_raw = [r for r in all_raw
-               if r.get("type") == "parttime"          # local part-time: its own rules
-               or (r.get("job_type") != "Internship" and is_target_title(r["title"]))]
+               if r.get("url", "").lower().startswith(("https://", "http://"))
+               and (r.get("type") == "parttime"          # local part-time: its own rules
+                    or (r.get("job_type") != "Internship" and is_target_title(r["title"])))]
 
     # ── Deduplicate against seen + within today's batch ────────────────────
     new_rows:   list[dict] = []

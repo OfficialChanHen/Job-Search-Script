@@ -6,6 +6,7 @@ import { liSearch, outreachMsg } from "@/lib/game/followups";
 import { NS, toggleOutreach, type KitJob, type ResumeEntry } from "@/lib/game/progress";
 import { STD_FIELDS, isGame, kitDrafts, knockouts, tellNote } from "@/lib/jobs/kit";
 import { fitFor, shortName } from "@/lib/jobs/resumes";
+import { jobHref } from "@/lib/jobs/sheet";
 import type { Store } from "@/lib/sync/store";
 
 export function FitChip({ j, resumes }: { j: Job; resumes: ResumeEntry[] }) {
@@ -106,7 +107,7 @@ export function KitPanel({ j, store, resumes, kit, applied, onApplied }: { j: Jo
         <Draft j={j} store={store} k="why" label={`Why ${j.company || "this company"}?`} resumes={resumes} kit={kit} />
         <Draft j={j} store={store} k="you" label="About you, and why you fit" resumes={resumes} kit={kit} />
         <div className="kgo">
-          <a className="mini primary" href={j.direct || j.url} target="_blank" rel="noopener">Open posting ↗</a>
+          <a className="mini primary" href={jobHref(j) || undefined} target="_blank" rel="noopener">Open posting ↗</a>
           <button className={"mini " + (applied ? "ok" : "")} onClick={onApplied}>{applied ? "✓ Applied" : "I submitted it ✓"}</button>
         </div>
       </div>

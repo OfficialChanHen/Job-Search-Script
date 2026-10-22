@@ -15,8 +15,15 @@ export function applicationOf(j: Pick<Job, "url" | "direct">) {
   const href = (j.direct || j.url || "").toLowerCase();
   return BOARDS.find(([re]) => re.test(href))?.[1] ?? "Company website";
 }
+/** The job's link, only if it's a web address: links come from scraped lists, and a "javascript:" one must never open. */
+export function jobHref(j: Pick<Job, "url" | "direct">) {
+  const u = (j.direct || j.url || "").trim();
+  return /^https?:\/\//i.test(u) ? u : "";
+}
+/** A cell that starts with = + - or @ would run as a formula in Sheets or Excel: keep it plain text. */
+export const plainCell = (v: string) => /^[=+\-@]/.test(v) ? "'" + v : v;
 export function sheetRow(j: Job, status: string, date = sheetToday()) {
-  return [date, j.company, j.title, j.location, status, applicationOf(j)];
+  return [date, j.company, j.title, j.location, status, applicationOf(j)].map(v => plainCell(String(v ?? "")));
 }
 export const isAppsScriptUrl = (u: string) => /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u);
 
@@ -25,7 +32,7 @@ export async function pushToSheet(url: string, j: Job, prep: Prep | undefined) {
   await fetch(url, {
     method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ date: sheetToday(), company: j.company, title: j.title, location: j.location, status: "Applied",
-                           application: j.id === "__test__" ? "Test" : applicationOf(j), url: j.direct || j.url, id: j.id, jobType: j.jobType || "", prep: prep?.text ?? "" }),
+                           application: j.id === "__test__" ? "Test" : applicationOf(j), url: jobHref(j), id: j.id, jobType: j.jobType || "", prep: prep?.text ?? "" }),
   });
 }
 

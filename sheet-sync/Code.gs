@@ -41,6 +41,14 @@ var COLUMNS = [
   { key: "prep",     headers: ["LeetCode Prep", "Prep"] },
 ];
 
+// Job titles and companies come from scraped postings. A leading = + - or @
+// would make Sheets run the text as a formula (one could send your tracker
+// to another site), so such values are stored as plain text.
+function _text(v) {
+  v = v === undefined || v === null ? "" : String(v);
+  return /^[=+\-@]/.test(v) ? "'" + v : v;
+}
+
 function _sheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   return SHEET_NAME ? ss.getSheetByName(SHEET_NAME) : ss.getSheets()[0];
@@ -70,8 +78,8 @@ function doPost(e) {
         : (coCol !== undefined && tiCol !== undefined && d.company && same(values[i][coCol], d.company) && same(values[i][tiCol], d.title));
       if (hit) {
         _set(sheet, i, hdr.cols.date, d.date);
-        _set(sheet, i, hdr.cols.status, d.status);
-        if (hdr.cols.application !== undefined && !values[i][hdr.cols.application]) _set(sheet, i, hdr.cols.application, d.application || "");
+        _set(sheet, i, hdr.cols.status, _text(d.status));
+        if (hdr.cols.application !== undefined && !values[i][hdr.cols.application]) _set(sheet, i, hdr.cols.application, _text(d.application));
         return _json({ ok: true, updated: true });
       }
     }
@@ -80,7 +88,7 @@ function doPost(e) {
     for (var c = 0; c < width; c++) row.push("");
     COLUMNS.forEach(function (col) {
       var idx = hdr.cols[col.key];
-      if (idx !== undefined) row[idx] = d[col.key] || "";
+      if (idx !== undefined) row[idx] = _text(d[col.key]);
     });
     sheet.appendRow(row);
     _formatLikeRowAbove(sheet, sheet.getLastRow(), hdr, width);
@@ -138,7 +146,7 @@ function _set(sheet, rowIdx, colIdx, value) {
 //                        results panel and the morning digest)
 function doGet(e) {
   if (!(e && e.parameter && e.parameter.rows)) {
-    return _json({ ok: true, service: "job-hunt-sheet-sync", version: 4 });
+    return _json({ ok: true, service: "job-hunt-sheet-sync", version: 5 });
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = _sheet();
